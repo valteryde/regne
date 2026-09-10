@@ -1,6 +1,6 @@
 import { Menu, MenuItemConstructorOptions, BrowserWindow, app, shell } from 'electron';
 
-export function createApplicationMenu(mainWindow: BrowserWindow): Menu {
+export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates?: () => void): Menu {
   const sendCommand = (cmd: string) => {
     mainWindow.webContents.send('menu:command', cmd);
   };
@@ -14,6 +14,10 @@ export function createApplicationMenu(mainWindow: BrowserWindow): Menu {
         {
           label: 'About Regne',
           role: 'about',
+        },
+        {
+          label: 'Check for Updates…',
+          click: () => checkForUpdates?.(),
         },
         { type: 'separator' },
         {
@@ -188,6 +192,11 @@ export function createApplicationMenu(mainWindow: BrowserWindow): Menu {
           click: () => {
             app.showAboutPanel();
           },
+        },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates…',
+          click: () => checkForUpdates?.(),
         },
       ],
     },

@@ -11,8 +11,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # Build across Windows, macOS, and Linux
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # Build across Windows and macOS
+        os: [windows-latest, macos-latest]
 
     steps:
       - name: Check out Git repository
@@ -27,9 +27,8 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # Optional: Run your build step if you are using TypeScript, React, etc.
-      # - name: Build source code
-      #   run: npm run build
+      - name: Build source code
+        run: npm run build
 
       - name: Build and Publish with electron-builder
         run: npx electron-builder --publish always

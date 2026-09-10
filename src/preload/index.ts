@@ -24,6 +24,12 @@ export interface RegneAPI {
     reset: () => Promise<any>;
     interrupt: () => void;
   };
+  updater: {
+    onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: any }) => void) => () => void;
+    onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
+    installUpdate: () => Promise<void>;
+    checkForUpdates: () => Promise<void>;
+  };
 }
 
 export type HypatiaAPI = RegneAPI;
@@ -71,6 +77,21 @@ const api: RegneAPI = {
     evaluate: (id: string, code: string) => ipcRenderer.invoke('cas:sympy:eval', { id, code }),
     reset: () => ipcRenderer.invoke('cas:sympy:reset'),
     interrupt: () => ipcRenderer.send('cas:sympy:interrupt'),
+  },
+
+  updater: {
+    onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: any }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, info: { version: string; releaseNotes?: any }) => callback(info);
+      ipcRenderer.on('updater:update-available', subscription);
+      return () => ipcRenderer.removeListener('updater:update-available', subscription);
+    },
+    onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, info: { version: string }) => callback(info);
+      ipcRenderer.on('updater:update-downloaded', subscription);
+      return () => ipcRenderer.removeListener('updater:update-downloaded', subscription);
+    },
+    installUpdate: () => ipcRenderer.invoke('updater:install-now'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   },
 };
 

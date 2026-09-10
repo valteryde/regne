@@ -5,6 +5,7 @@ import * as fsSync from 'fs';
 import { ChildProcess, spawn } from 'child_process';
 import * as readline from 'readline';
 import { createApplicationMenu } from './menu';
+import { autoUpdater } from 'electron-updater';
 
 // Set application name early so menu and system dialogs show "Regne"
 if (app) {
@@ -75,7 +76,23 @@ function createWindow() {
     },
   });
 
-  const menu = createApplicationMenu(mainWindow);
+  const checkForUpdates = async () => {
+    (autoUpdater as any).__manualCheck = true;
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (err: any) {
+      (autoUpdater as any).__manualCheck = false;
+      dialog.showMessageBox(mainWindow!, {
+        type: 'error',
+        title: 'Update Check Failed',
+        message: 'Could not check for updates.',
+        detail: err?.message ?? String(err),
+        buttons: ['OK'],
+      });
+    }
+  };
+
+  const menu = createApplicationMenu(mainWindow, isDev ? undefined : checkForUpdates);
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(menu);
   } else {
@@ -457,6 +474,99 @@ ipcMain.on('cas:sympy:interrupt', () => {
   sympyManager.interrupt();
 });
 
+// --- Auto Updater ---
+function setupAutoUpdater(): void {
+  // Configure logging
+  autoUpdater.logger = {
+    info: (msg: any) => console.log('[AutoUpdater]', msg),
+    warn: (msg: any) => console.warn('[AutoUpdater]', msg),
+    error: (msg: any) => console.error('[AutoUpdater]', msg),
+    debug: (msg: any) => console.log('[AutoUpdater DEBUG]', msg),
+  } as any;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for update...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info.version);
+    mainWindow?.webContents.send('updater:update-available', {
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+    });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] No update available. Current version:', info.version);
+    // Only surface this when triggered by a manual check (flag set in IPC handler)
+    if ((autoUpdater as any).__manualCheck) {
+      (autoUpdater as any).__manualCheck = false;
+      if (mainWindow) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'No Updates Available',
+          message: `You are running the latest version of Regne (${info.version}).`,
+          buttons: ['OK'],
+        });
+      }
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded:', info.version);
+    mainWindow?.webContents.send('updater:update-downloaded', {
+      version: info.version,
+    });
+    // Also show a native dialog so the user always sees it
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Ready',
+        message: `Regne ${info.version} has been downloaded.`,
+        detail: 'Restart the application to apply the update.',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater] Error:', err?.message ?? err);
+  });
+}
+
+// IPC: Trigger install of the downloaded update
+ipcMain.handle('updater:install-now', async () => {
+  autoUpdater.quitAndInstall();
+});
+
+// IPC: Manual "Check for Updates…" from menu
+ipcMain.handle('updater:check', async () => {
+  (autoUpdater as any).__manualCheck = true;
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err: any) {
+    (autoUpdater as any).__manualCheck = false;
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Update Check Failed',
+        message: 'Could not check for updates.',
+        detail: err?.message ?? String(err),
+        buttons: ['OK'],
+      });
+    }
+  }
+});
+
 app.whenReady().then(() => {
   app.name = 'Regne';
   app.setName('Regne');
@@ -488,6 +598,17 @@ app.whenReady().then(() => {
 
   sympyManager.start();
   createWindow();
+
+  // Set up auto-updater in packaged builds only
+  if (!isDev) {
+    setupAutoUpdater();
+    // Delay the first check slightly so the window has time to fully render
+    setTimeout(() => {
+      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        console.warn('[AutoUpdater] Initial check failed:', err?.message ?? err);
+      });
+    }, 5000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

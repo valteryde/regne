@@ -583,8 +583,23 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     updateElement(id, { isEvaluating: true });
 
+    // Strip LaTeX color commands injected by MathLive's applyStyle()
+    // e.g. \textcolor{red}{x^2} -> x^2, \color{blue} -> (empty)
+    const stripColorCommands = (latex: string): string => {
+      let result = latex;
+      // Remove \textcolor{color}{content} -> content (handle nested braces)
+      let prev = '';
+      while (prev !== result) {
+        prev = result;
+        result = result.replace(/\\textcolor\{[^}]*\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '$1');
+      }
+      // Remove \color{color} or \color{color} standalone
+      result = result.replace(/\\color\{[^}]*\}/g, '');
+      return result;
+    };
+
     try {
-      const result = await evaluate(el.input);
+      const result = await evaluate(stripColorCommands(el.input));
       updateElement(id, {
         evaluated: true,
         isEvaluating: false,

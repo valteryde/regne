@@ -270,7 +270,7 @@ const MathLine: React.FC<MathLineProps> = memo(({
           {error}
         </div>
       ) : evaluated && resultLatex ? (
-        <div className="py-1.5 pl-6 select-text">
+        <div className="py-1.5 pl-6 select-text" style={color ? { color } : undefined}>
           <KaTeXRenderer
             math={resultLatex}
             displayMode={false}
