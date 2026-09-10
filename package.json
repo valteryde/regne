@@ -16,8 +16,12 @@
     "dev:main": "tsc -p tsconfig.node.json --watch",
     "dev": "node scripts/brand-electron.cjs && concurrently -k \"npm run dev:renderer\" \"npm run dev:main\""
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/regne.git"
+  },
   "keywords": [],
-  "author": "",
+  "author": "Valter Daugberg <valteryde@usepost.dk>",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
@@ -38,9 +42,26 @@
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
     "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
+  },
+  "build": {
+    "appId": "com.yourname.regne",
+    "publish": ["github"],
+    "files": [
+      "dist/**/*"
+    ],
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }
