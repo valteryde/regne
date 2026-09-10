@@ -1,0 +1,109 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+/* Dynamic theme styling variables — Engineering Workstation Palette */
+:root {
+  --bg-canvas: #faf8f5;
+  --bg-chrome: #f3f4f6;
+  --bg-surface: #ffffff;
+  --bg-subtle: #e5e7eb;
+  --border-color: #d1d5db;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --math-input-color: #7f1d1d;
+  --math-output-color: #0000bb;
+  --maple-blue: var(--math-output-color);
+  --selection-bg: #b4d5fe;
+}
+
+/* Global Selection Styling */
+::selection {
+  background-color: var(--selection-bg) !important;
+  color: inherit !important;
+}
+
+math-field {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  --selection-background-color: var(--selection-bg);
+  --caret-color: var(--text-primary);
+  color: var(--math-input-color);
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+math-field:focus,
+math-field:focus-within,
+math-field:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+[contenteditable]:focus,
+[contenteditable]:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+math-field::part(virtual-keyboard-toggle),
+math-field::part(menu-toggle) {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Multi-line document selection styling */
+.maple-selected {
+  background-color: var(--selection-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+.maple-selected math-field {
+  background-color: var(--selection-bg) !important;
+  --selection-background-color: var(--selection-bg) !important;
+}
+
+.maple-selected .maple-output,
+.maple-selected .maple-output * {
+  background-color: transparent !important;
+}
+
+/* Industrial Precision Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-chrome);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Math typesetting */
+.maple-output .katex-display {
+  margin: 0.35rem 0 !important;
+  color: var(--maple-blue);
+  font-size: 1.25rem;
+}
+
+.maple-output .katex {
+  color: var(--maple-blue);
+  font-size: 1.25rem;
+}

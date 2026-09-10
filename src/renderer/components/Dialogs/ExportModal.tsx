@@ -1,0 +1,200 @@
+import React, { useState, useMemo } from 'react';
+import { useDocument } from '../../context/DocumentContext';
+import { X, FileText, Copy, Download, Check } from 'lucide-react';
+
+interface ExportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => {
+  const { document: doc, exportDocument } = useDocument();
+  const [format, setFormat] = useState<'tex' | 'html'>('tex');
+  const [copied, setCopied] = useState(false);
+
+  const previewContent = useMemo(() => {
+    if (format === 'tex') {
+      let tex = `\\documentclass{article}\n\\usepackage{amsmath}\n\\usepackage{amsfonts}\n\\usepackage{amsthm}\n\\usepackage{xcolor}\n\n`;
+      tex += `\\newtheorem{theorem}{Theorem}\n\\newtheorem{lemma}{Lemma}\n\\newtheorem{definition}{Definition}\n\n`;
+      tex += `\\title{${doc.title}}\n\\date{\\today}\n\n\\begin{document}\n\\maketitle\n\\tableofcontents\n\\vspace{1cm}\n\n`;
+      for (const el of doc.elements) {
+        if (el.type === 'section') {
+          const sec = el as any;
+          const level = sec.level || 1;
+          const title = sec.title || 'Untitled';
+          if (sec.kind === 'theorem') {
+            tex += `\\begin{theorem}[${title}]\n\\end{theorem}\n\n`;
+          } else if (sec.kind === 'lemma') {
+            tex += `\\begin{lemma}[${title}]\n\\end{lemma}\n\n`;
+          } else if (level === 1) {
+            tex += `\\section{${title}}\n\n`;
+          } else if (level === 2) {
+            tex += `\\subsection{${title}}\n\n`;
+          } else {
+            tex += `\\subsubsection{${title}}\n\n`;
+          }
+        } else if (el.type === 'text') {
+          let textTex = el.content
+            .replace(/<b>(.*?)<\/b>/gi, '\\textbf{$1}')
+            .replace(/<strong>(.*?)<\/strong>/gi, '\\textbf{$1}')
+            .replace(/<i>(.*?)<\/i>/gi, '\\textit{$1}')
+            .replace(/<em>(.*?)<\/em>/gi, '\\textit{$1}')
+            .replace(/<u>(.*?)<\/u>/gi, '\\underline{$1}')
+            .replace(/<span[^>]*style="[^"]*color:\s*([^;"]+)[^"]*"[^>]*>(.*?)<\/span>/gi, '{\\color{$1} $2}')
+            .replace(/<[^>]*>/g, '');
+          if (el.color) {
+            textTex = `{\\color{${el.color}} ${textTex}}`;
+          }
+          tex += `${textTex}\n\n`;
+        } else if (el.type === 'math') {
+          tex += `\\begin{verbatim}\n${el.input}\n\\end{verbatim}\n`;
+          if (el.resultLatex) {
+            tex += `\\begin{equation*}\n{\\color{blue} ${el.resultLatex}}\n\\end{equation*}\n\n`;
+          }
+        }
+      }
+      tex += `\\end{document}\n`;
+      return tex;
+    } else {
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${doc.title}</title>\n`;
+      html += `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">\n`;
+      html += `<style>body{font-family:serif;max-width:760px;margin:3rem auto;padding:1rem;line-height:1.7} .math-in{font-family:monospace;color:#7f1d1d} .math-out{color:#0000bb;text-align:center;margin:1rem 0;font-size:1.2rem} h2{border-bottom:1px solid #e5e7eb;padding-bottom:0.3rem;margin-top:2rem} h3{margin-top:1.5rem} .theorem{background:#f8fafc;border-left:4px solid #242e84;padding:0.75rem 1rem;margin:1rem 0}</style></head><body>\n`;
+      html += `<h1>${doc.title}</h1>\n`;
+      const sections = doc.elements.filter(e => e.type === 'section') as any[];
+      if (sections.length > 0) {
+        html += `<nav style="background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;margin-bottom:2rem;border-radius:4px;"><strong>Table of Contents</strong><ul style="padding-left:1.5rem;margin-top:0.5rem;">\n`;
+        sections.forEach(s => {
+          html += `<li><a href="#${s.id}">${s.title || 'Untitled'}</a></li>\n`;
+        });
+        html += `</ul></nav>\n`;
+      }
+      for (const el of doc.elements) {
+        if (el.type === 'section') {
+          const sec = el as any;
+          const level = sec.level || 1;
+          const title = sec.title || 'Untitled';
+          if (sec.kind === 'theorem' || sec.kind === 'lemma') {
+            html += `<div class="theorem" id="${sec.id}"><strong>${sec.kind === 'theorem' ? 'Theorem' : 'Lemma'}:</strong> ${title}</div>\n`;
+          } else if (level === 1) {
+            html += `<h2 id="${sec.id}">${title}</h2>\n`;
+          } else if (level === 2) {
+            html += `<h3 id="${sec.id}">${title}</h3>\n`;
+          } else {
+            html += `<h4 id="${sec.id}">${title}</h4>\n`;
+          }
+        } else if (el.type === 'text') {
+          const styles: string[] = [];
+          if (el.color) styles.push(`color: ${el.color}`);
+          if (el.backgroundColor) styles.push(`background-color: ${el.backgroundColor}`);
+          const styleAttr = styles.length > 0 ? ` style="${styles.join('; ')}"` : '';
+          html += `<p${styleAttr}>${el.content}</p>\n`;
+        } else if (el.type === 'math') {
+          const mathStyles: string[] = [];
+          if (el.color) mathStyles.push(`color: ${el.color}`);
+          if (el.backgroundColor) mathStyles.push(`background-color: ${el.backgroundColor}`);
+          const mathStyleAttr = mathStyles.length > 0 ? ` style="${mathStyles.join('; ')}"` : '';
+          html += `<div class="math-in"${mathStyleAttr}>${el.input}</div>\n`;
+          if (el.resultLatex) {
+            html += `<div class="math-out">\\[${el.resultLatex}\\]</div>\n`;
+          }
+        }
+      }
+      html += `</body></html>`;
+      return html;
+    }
+  }, [doc, format]);
+
+  if (!isOpen) return null;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(previewContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    exportDocument(format);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-[var(--bg-surface)] rounded-lg shadow-xl max-w-xl w-full border border-[var(--border-color)] overflow-hidden flex flex-col max-h-[85vh] transition-colors">
+        {/* Header */}
+        <div className="h-11 px-4 bg-[var(--bg-chrome)] border-b border-[var(--border-color)] flex items-center justify-between select-none shrink-0">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)]">
+            <FileText className="w-3.5 h-3.5 text-[#242e84]" />
+            <span>Export Document</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-4 overflow-y-auto space-y-3 text-xs flex-1 flex flex-col">
+          <div className="flex items-center gap-1.5 border-b border-[var(--border-color)] pb-2.5">
+            <button
+              onClick={() => setFormat('tex')}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                format === 'tex'
+                  ? 'bg-[#242e84] text-white font-semibold shadow-2xs'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
+              }`}
+            >
+              LaTeX (.tex)
+            </button>
+            <button
+              onClick={() => setFormat('html')}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                format === 'html'
+                  ? 'bg-[#242e84] text-white font-semibold shadow-2xs'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]'
+              }`}
+            >
+              HTML (.html)
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-[220px]">
+            <textarea
+              readOnly
+              value={previewContent}
+              className="w-full h-full p-2.5 font-mono text-[11px] leading-relaxed bg-[var(--bg-canvas)] border border-[var(--border-color)] rounded resize-none text-[var(--text-primary)] focus:outline-hidden"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="h-11 px-4 bg-[var(--bg-chrome)] border-t border-[var(--border-color)] flex justify-between items-center text-xs select-none">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] font-medium transition-colors"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-1 rounded text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3.5 py-1 bg-[#242e84] hover:bg-[#1a2266] text-white rounded font-medium transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
