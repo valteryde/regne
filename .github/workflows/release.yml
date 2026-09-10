@@ -1,47 +1,59 @@
-name: Build and Publish Electron App
+name: Build Electron App
 
 on:
   push:
     tags:
-      - 'v*' # Triggers workflow when you push a tag like "v1.0.0"
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # Build across Windows and macOS
-        os: [windows-latest, macos-latest]
+        include:
+          - os: macos-latest
+            artifact_name: Regne-mac
+          - os: windows-latest
+            artifact_name: Regne-windows
 
     steps:
-      - name: Check out Git repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Change to match your project's Node version
+          node-version: 20
           cache: npm
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm ci
 
       - name: Build source code
         run: npm run build
 
-      - name: Build and Publish with electron-builder
-        run: npx electron-builder --publish always
+      - name: Package with electron-builder
+        run: npx electron-builder --publish never
         env:
-          # This token is automatically provided by GitHub Actions
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-          # Uncomment and configure these if you are signing your macOS app
-          # CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          # CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload macOS installer
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/*.exe
+          if-no-files-found: error
