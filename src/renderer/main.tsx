@@ -55,6 +55,41 @@ if (typeof Element !== 'undefined') {
   };
 }
 
+// Ensure globally that math-field does not automatically convert any letter-based shortcuts (e.g. pi, delta, in, sin)
+if (typeof window !== 'undefined' && window.customElements) {
+  window.customElements.whenDefined('math-field').then(() => {
+    const MathfieldElementClass = window.customElements.get('math-field') as any;
+    if (MathfieldElementClass?.prototype) {
+      const origConnected = MathfieldElementClass.prototype.connectedCallback;
+      if (origConnected) {
+        MathfieldElementClass.prototype.connectedCallback = function () {
+          origConnected.apply(this, arguments);
+          try {
+            if (this.inlineShortcuts) {
+              const current = this.inlineShortcuts;
+              let hasLetterShortcut = false;
+              const nonLetterShortcuts: Record<string, any> = {};
+              for (const k of Object.keys(current)) {
+                if (/[a-zA-Z]/.test(k)) {
+                  hasLetterShortcut = true;
+                } else {
+                  nonLetterShortcuts[k] = current[k];
+                }
+              }
+              if (hasLetterShortcut) {
+                this.inlineShortcuts = nonLetterShortcuts;
+              }
+            }
+            this.onInlineShortcut = () => '';
+          } catch {
+            // ignore
+          }
+        };
+      }
+    }
+  });
+}
+
 window.addEventListener('error', (e) => {
   console.error('[Global Renderer Error]:', e.message, e.filename, e.lineno, e.error);
 });

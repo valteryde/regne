@@ -14,7 +14,13 @@ export const KaTeXRenderer: React.FC<KaTeXRendererProps> = ({
 }) => {
   const html = useMemo(() => {
     try {
-      return katex.renderToString(math, {
+      const trimmed = (math || '').trim();
+      const processedMath =
+        !displayMode && trimmed && !trimmed.startsWith('\\displaystyle') && !trimmed.startsWith('\\textstyle')
+          ? `\\displaystyle ${trimmed}`
+          : trimmed;
+
+      return katex.renderToString(processedMath, {
         displayMode,
         throwOnError: false,
         strict: false,

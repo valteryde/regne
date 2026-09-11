@@ -115,7 +115,7 @@ export class MockCasEngine implements ICasEngine {
         return {
           id: request.id,
           success: true,
-          resultLatex: `${target} := ${valueLatex}`,
+          resultLatex: `${this.varNameToLatex(target)} := ${valueLatex}`,
           resultText: `${target} := ${valueExpr}`,
           resultType: 'equation',
           assignedVariables: [newVar],
@@ -250,6 +250,12 @@ export class MockCasEngine implements ICasEngine {
     }
   }
 
+  /** Converts a plain variable name like E_pot into LaTeX E_{pot}. */
+  private varNameToLatex(name: string): string {
+    // Replace _foo (multi-char subscript) with _{foo}; single-char _x stays as-is
+    return name.replace(/_([a-zA-Z0-9]{2,})/g, '_{$1}');
+  }
+
   public toLatex(expr: string): string {
     // If it's already LaTeX from MathLive, return cleaned LaTeX
     if (expr.includes('\\frac') || expr.includes('\\int') || expr.includes('\\sum') || expr.includes('\\left') || expr.includes('^')) {
@@ -260,10 +266,10 @@ export class MockCasEngine implements ICasEngine {
     if (clean.endsWith(';')) clean = clean.slice(0, -1).trim();
 
     const greekMap: Record<string, string> = {
-      alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta',
+      alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma',
       epsilon: '\\epsilon', theta: '\\theta', lambda: '\\lambda', mu: '\\mu',
       pi: '\\pi', Pi: '\\pi', rho: '\\rho', sigma: '\\sigma', phi: '\\phi',
-      omega: '\\omega', Gamma: '\\Gamma', Delta: '\\Delta', Theta: '\\Theta',
+      omega: '\\omega', Gamma: '\\Gamma', Theta: '\\Theta',
       Lambda: '\\Lambda', Sigma: '\\Sigma', Phi: '\\Phi', Omega: '\\Omega',
       infinity: '\\infty',
     };

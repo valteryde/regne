@@ -107,6 +107,8 @@ math-field::part(menu-toggle) {
 /* Math typesetting */
 .maple-output {
   overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
 }
 
 .maple-output .katex-display {

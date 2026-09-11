@@ -45,6 +45,8 @@ interface DocumentContextValue {
   
   evaluateMath: (id: string) => Promise<void>;
   evaluateAll: () => Promise<void>;
+  unevaluateMath: (id: string) => void;
+  unevaluateAll: () => void;
   
   insertAtCursor: (snippet: string) => void;
   insertMatrix: (rows: number, cols: number, bracketType?: 'pmatrix' | 'bmatrix' | 'vmatrix' | 'matrix') => void;
@@ -555,11 +557,12 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     setDoc((prev) => {
       if (prev.elements.length <= 1) return prev;
       const idx = prev.elements.findIndex((e) => e.id === id);
+      if (idx === -1) return prev;
       const elements = prev.elements.filter((e) => e.id !== id);
-      
       const nextActive = elements[Math.max(0, idx - 1)]?.id || null;
-      setActiveElementId(nextActive);
-
+      // Schedule activeElementId update outside the updater to avoid the React anti-pattern
+      // of calling setState inside another setState's functional updater.
+      setTimeout(() => setActiveElementId(nextActive), 0);
       const updated = { ...prev, elements, updatedAt: Date.now() };
       pushHistory(updated);
       return updated;
@@ -627,6 +630,27 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     }
   }, [doc.elements, evaluateMath]);
+
+  const unevaluateMath = useCallback((id: string) => {
+    updateElement(id, {
+      evaluated: false,
+      isEvaluating: false,
+      resultLatex: undefined,
+      resultText: undefined,
+      resultPlotSvg: undefined,
+      resultType: undefined,
+      error: undefined,
+    });
+  }, [updateElement]);
+
+  const unevaluateAll = useCallback(() => {
+    for (const el of doc.elements) {
+      if (el.type === 'math') {
+        unevaluateMath(el.id);
+      }
+    }
+  }, [doc.elements, unevaluateMath]);
+
 
   const insertAtCursor = useCallback((snippet: string) => {
     // 1. Check if a 2D math-field is active or focused
@@ -1072,6 +1096,8 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         setElements,
         evaluateMath,
         evaluateAll,
+        unevaluateMath,
+        unevaluateAll,
         insertAtCursor,
         insertMatrix,
         insertRawTeX,

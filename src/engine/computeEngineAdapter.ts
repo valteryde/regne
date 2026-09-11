@@ -9,6 +9,11 @@ import {
   EngineScopeListener,
 } from './types';
 
+/** Converts a plain variable name like E_pot into LaTeX E_{pot}. */
+function varNameToLatex(name: string): string {
+  return name.replace(/_([a-zA-Z0-9]{2,})/g, '_{$1}');
+}
+
 /**
  * ComputeEngineAdapter
  * 
@@ -136,7 +141,7 @@ export class ComputeEngineAdapter implements ICasEngine {
         return {
           id: request.id,
           success: true,
-          resultLatex: `${varName} := ${valueLatex}`,
+          resultLatex: `${varNameToLatex(varName)} := ${valueLatex}`,
           resultText: `${varName} := ${valueText}`,
           resultType: 'equation',
           assignedVariables: [newVar],

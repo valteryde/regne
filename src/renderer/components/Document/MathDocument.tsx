@@ -5,7 +5,7 @@ import { KaTeXRenderer } from '../Worksheet/KaTeXRenderer';
 import { DocumentElement, ElementType, SectionElement, SectionKind } from '../../../types/document';
 import { computeOutline, getCollapsedElementIds, OutlineItem } from '../../utils/outline';
 import { SectionLine } from './SectionLine';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 
 interface SelectionRange {
   start: number;
@@ -201,6 +201,7 @@ interface MathLineProps {
   onFocus: () => void;
   onChange: (newContent: string) => void;
   onEvaluate: () => void;
+  onUnevaluate: () => void;
   onDeleteEmpty: () => void;
   onNavigateUp: () => void;
   onNavigateDown: () => void;
@@ -226,6 +227,7 @@ const MathLine: React.FC<MathLineProps> = memo(({
   onFocus,
   onChange,
   onEvaluate,
+  onUnevaluate,
   onDeleteEmpty,
   onNavigateUp,
   onNavigateDown,
@@ -233,6 +235,43 @@ const MathLine: React.FC<MathLineProps> = memo(({
   registerRef,
 }) => {
   const mfHandleRef = useRef<MathFieldHandle | null>(null);
+  const [resultSelected, setResultSelected] = useState(false);
+  const resultAreaRef = useRef<HTMLDivElement | null>(null);
+
+  // Deselect result when clicking outside or pressing Escape; delete on Backspace/Delete
+  useEffect(() => {
+    if (!resultSelected) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        e.stopPropagation();
+        setResultSelected(false);
+        onUnevaluate();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setResultSelected(false);
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (resultAreaRef.current && !resultAreaRef.current.contains(e.target as Node)) {
+        setResultSelected(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('mousedown', handleMouseDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, [resultSelected, onUnevaluate]);
+
+  // Deselect result when the element is no longer evaluated
+  useEffect(() => {
+    if (!evaluated) setResultSelected(false);
+  }, [evaluated]);
 
   return (
     <div
@@ -276,17 +315,37 @@ const MathLine: React.FC<MathLineProps> = memo(({
           Evaluating...
         </div>
       ) : error ? (
-        <div className="py-0.5 pl-6 text-red-600 text-xs font-mono select-text">
-          {error}
+        <div
+          ref={resultAreaRef}
+          className={`group/result relative flex items-start gap-1 py-0.5 pl-6 select-text cursor-pointer rounded-sm transition-colors ${
+            resultSelected ? 'bg-blue-100 ring-1 ring-blue-300' : ''
+          }`}
+          onClick={(e) => { e.stopPropagation(); setResultSelected(!resultSelected); }}
+        >
+          <span className="text-red-600 text-xs font-mono">{error}</span>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onUnevaluate(); }}
+            className="ml-auto opacity-0 group-hover/result:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 cursor-pointer"
+            title="Clear result"
+          >
+            <X className="w-3 h-3" />
+          </button>
         </div>
       ) : evaluated && (resultPlotSvg || resultType === 'plot') ? (
-        <div className="py-1.5 pl-6 select-text">
+        <div
+          ref={resultAreaRef}
+          className={`group/result relative py-1.5 pl-6 select-text cursor-pointer rounded-sm transition-colors ${
+            resultSelected ? 'bg-blue-100 ring-1 ring-blue-300' : ''
+          }`}
+          onClick={(e) => { e.stopPropagation(); setResultSelected(!resultSelected); }}
+        >
           <div className="relative group/plot inline-block w-full max-w-[560px] rounded border border-slate-200 bg-white p-2 shadow-xs transition-shadow hover:shadow-sm">
             <div
               className="w-full h-auto overflow-hidden [&>svg]:w-full [&>svg]:h-auto [&>svg]:block"
               dangerouslySetInnerHTML={{ __html: resultPlotSvg || '' }}
             />
-            {/* Quick Action to copy SVG code */}
+            {/* Quick Actions: copy SVG + dismiss */}
             <div className="absolute top-2 right-2 opacity-0 group-hover/plot:opacity-100 transition-opacity flex items-center gap-1 bg-white/90 backdrop-blur-xs border border-slate-200 rounded px-1.5 py-0.5 shadow-2xs">
               <button
                 type="button"
@@ -301,16 +360,40 @@ const MathLine: React.FC<MathLineProps> = memo(({
               >
                 Copy SVG
               </button>
+              <span className="text-slate-300 select-none">|</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onUnevaluate(); }}
+                className="text-[10px] text-slate-500 hover:text-red-600 cursor-pointer font-sans select-none flex items-center gap-0.5"
+                title="Clear result"
+              >
+                <X className="w-2.5 h-2.5" /> Clear
+              </button>
             </div>
           </div>
         </div>
       ) : evaluated && resultLatex ? (
-        <div className="pt-0.5 pb-0.5 pl-6 select-text overflow-x-auto" style={color ? { color } : undefined}>
+        <div
+          ref={resultAreaRef}
+          className={`group/result relative flex items-center gap-1 py-1 pl-6 select-text overflow-x-auto overflow-y-hidden cursor-pointer rounded-sm transition-colors ${
+            resultSelected ? 'bg-blue-100 ring-1 ring-blue-300' : ''
+          }`}
+          style={color ? { color } : undefined}
+          onClick={(e) => { e.stopPropagation(); setResultSelected(!resultSelected); }}
+        >
           <KaTeXRenderer
             math={resultLatex}
             displayMode={false}
-            className="select-text"
+            className="select-text flex-1 min-w-0"
           />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onUnevaluate(); }}
+            className="opacity-0 group-hover/result:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer ml-2"
+            title="Clear result"
+          >
+            <X className="w-3 h-3" />
+          </button>
         </div>
       ) : null}
     </div>
@@ -344,6 +427,7 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     deleteElement,
     setElements,
     evaluateMath,
+    unevaluateMath,
     activeInputRef,
     saveDocument,
     openDocument,
@@ -548,8 +632,28 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
       if (e.buttons !== 1 || !dragStartRef.current) return;
 
       const dy = Math.abs(e.clientY - dragStartRef.current.y);
+
+      // Try elementFromPoint first; it fails on empty lines (no content to hit)
       const currentEl = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-      const currentRow = currentEl?.closest?.('[data-element-idx]') as HTMLElement | null;
+      let currentRow = currentEl?.closest?.('[data-element-idx]') as HTMLElement | null;
+
+      // Fallback: find the nearest row by Y-midpoint proximity when the cursor
+      // lands in a gap or on an empty-line element that has no [data-element-idx] ancestor.
+      if (!currentRow && elementsContainerRef.current) {
+        const rows = elementsContainerRef.current.querySelectorAll<HTMLElement>('[data-element-idx]');
+        let bestRow: HTMLElement | null = null;
+        let bestDist = Infinity;
+        rows.forEach((row) => {
+          const rect = row.getBoundingClientRect();
+          const midY = (rect.top + rect.bottom) / 2;
+          const dist = Math.abs(e.clientY - midY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestRow = row;
+          }
+        });
+        currentRow = bestRow;
+      }
 
       if (currentRow && currentRow.dataset.elementIdx !== undefined) {
         const currentIdx = parseInt(currentRow.dataset.elementIdx, 10);
@@ -1042,6 +1146,7 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
                   const newId = insertElement(mode, el.id);
                   ensureFocusById(newId, false);
                 }}
+                onUnevaluate={() => unevaluateMath(el.id)}
                 onDeleteEmpty={() => {
                   if (doc.elements.length > 1) {
                     const prevIdx = Math.max(0, index - 1);

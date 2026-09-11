@@ -113,8 +113,23 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         // Absolutely no-op: never scroll the document container when writing math
       };
 
-      // Make CAS function names render upright (not italic/cursive)
+      // Configure inline shortcuts:
+      // Remove all shortcuts containing letters (e.g. 'pi', 'delta', 'alpha', 'in', 'sin', etc.)
+      // so users can freely type multi-letter words and variable names (like 'pillage', 'inside', 'delta')
+      // without them being prematurely replaced by symbols.
+      // Symbols must be entered explicitly via backslash (e.g. \pi, \delta, \alpha).
       try {
+        const rawShortcuts = (mf as any).inlineShortcuts || {};
+        const nonLetterShortcuts: Record<string, any> = {};
+        for (const [key, val] of Object.entries(rawShortcuts)) {
+          if (!/[a-zA-Z]/.test(key)) {
+            nonLetterShortcuts[key] = val;
+          }
+        }
+        (mf as any).inlineShortcuts = nonLetterShortcuts;
+        (mf as any).onInlineShortcut = () => '';
+
+        // Add CAS function macros for LaTeX mode (e.g. \solve, \diff, \integrate)
         const casFunctions = [
           'plot', 'solve', 'diff', 'factor', 'expand', 'simplify',
           'integrate', 'limit', 'series', 'det', 'inv',
@@ -122,13 +137,13 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
           'collect', 'cancel', 'apart', 'together', 'radsimp',
           'trigsimp', 'powsimp', 'logcombine', 'nsimplify',
         ];
-        const casShortcuts: Record<string, string> = {};
+        const casMacros: Record<string, string> = {};
         for (const fn of casFunctions) {
-          casShortcuts[fn] = `\\operatorname{${fn}}`;
+          casMacros[fn] = `\\operatorname{${fn}}`;
         }
-        (mf as any).inlineShortcuts = {
-          ...(mf as any).inlineShortcuts,
-          ...casShortcuts,
+        (mf as any).macros = {
+          ...((mf as any).macros || {}),
+          ...casMacros,
         };
       } catch {
         // ignore if not supported
@@ -231,6 +246,11 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
 
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
+          // If MathLive is in LaTeX input mode (e.g. user typed \delta and presses Enter to resolve it),
+          // allow MathLive to handle Enter to complete the LaTeX command into the symbol atom first.
+          if ((mf as any).mode === 'latex') {
+            return;
+          }
           e.preventDefault();
           e.stopPropagation();
           if (onEvaluateRef.current) {

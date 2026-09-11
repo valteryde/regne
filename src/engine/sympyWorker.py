@@ -353,6 +353,13 @@ class SymPyWorker:
         # Exponent braces: ^{...} -> ^(...)
         s = re.sub(r'\^\{([^{}]+)\}', r'^(\1)', s)
 
+        # Final safety pass: strip any remaining unrecognized LaTeX commands (\word) that
+        # survived the preprocessing pipeline. A bare backslash in the resulting string
+        # would be interpreted by Python's tokenizer as a line-continuation character,
+        # causing the "unexpected character after line continuation character" SyntaxError.
+        s = re.sub(r'\\[a-zA-Z]+\b', '', s)  # \command -> (remove)
+        s = s.replace('\\', '')                 # bare \ -> (remove)
+
         return s
 
     def _split_top_level(self, s: str, sep: str = ',') -> list:
@@ -774,6 +781,11 @@ class SymPyWorker:
 
     def _parse_and_eval(self, expr_str: str, custom_scope=None):
         scope = self.scope if custom_scope is None else custom_scope
+        # Auto-register any unknown identifiers (e.g. subscripted names like v_A, m_B)
+        # as real SymPy Symbols so the parser never sees them as Python dicts/None.
+        for ident in re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', expr_str):
+            if ident not in scope:
+                scope[ident] = Symbol(ident, real=True)
         return parse_expr(
             expr_str,
             local_dict=scope,
