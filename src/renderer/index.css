@@ -105,10 +105,15 @@ math-field::part(menu-toggle) {
 }
 
 /* Math typesetting */
+.maple-output {
+  overflow-x: auto;
+}
+
 .maple-output .katex-display {
   margin: 0.15rem 0 !important;
   color: var(--maple-blue);
   font-size: 1.25rem;
+  overflow-x: unset; /* let parent handle overflow */
 }
 
 .maple-output .katex {

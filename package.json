@@ -1,7 +1,7 @@
 {
   "name": "regne",
   "productName": "Regne",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Regne - Mathematical CAS Document Workspace",
   "main": "dist/main/main.js",
   "scripts": {
