@@ -13,7 +13,7 @@ import {
   AlertCircle,
   Sparkles,
 } from 'lucide-react';
-import { UpdaterState } from '../../../preload';
+import { UpdaterState, VenvSetupState } from '../../../preload';
 import { useEngine } from '../../context/EngineContext';
 import { useDocument } from '../../context/DocumentContext';
 import { RegneMascot } from '../Brand/RegneMascot';
@@ -52,6 +52,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     progress: null,
     error: null,
   });
+  const [venvState, setVenvState] = useState<VenvSetupState>({
+    isSettingUp: false,
+    message: '',
+    error: null,
+    venvPath: '',
+    ready: false,
+  });
+  const [isRepairing, setIsRepairing] = useState<boolean>(false);
+
+  useEffect(() => {
+    const api = window.regneAPI || window.hypatiaAPI;
+    if (api?.casSympy?.getSetupStatus) {
+      api.casSympy.getSetupStatus().then((state) => {
+        if (state) setVenvState(state);
+      }).catch(() => {});
+    }
+    if (api?.casSympy?.onSetupProgress) {
+      const unsub = api.casSympy.onSetupProgress((state) => {
+        setVenvState(state);
+      });
+      return () => unsub();
+    }
+  }, []);
 
   useEffect(() => {
     const api = window.regneAPI || window.hypatiaAPI;
@@ -94,6 +117,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     api?.updater.installUpdate().catch((err) => {
       console.error('[SettingsModal] Install update error:', err);
     });
+  };
+
+  const handleRepairVenv = async () => {
+    const api = window.regneAPI || window.hypatiaAPI;
+    if (!api?.casSympy?.reinstallVenv) return;
+    setIsRepairing(true);
+    try {
+      await api.casSympy.reinstallVenv();
+    } catch (err) {
+      console.error('[SettingsModal] Reinstall venv error:', err);
+    } finally {
+      setIsRepairing(false);
+    }
   };
 
   // Escape key closes modal
@@ -277,6 +313,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Clear Scope</span>
                   </button>
+                </div>
+
+                {/* Dedicated Python Environment (venv) */}
+                <div className="pt-3 border-t border-[var(--border-color)]">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                        <span>Dedicated Math Environment (venv)</span>
+                        {venvState.ready && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Active
+                          </span>
+                        )}
+                        {venvState.isSettingUp && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                            <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                            Installing...
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted)] mt-0.5 font-mono break-all select-all">
+                        {venvState.venvPath || '~/Library/Application Support/Regne/venv'}
+                      </div>
+                      <div className="text-[11px] text-[var(--text-secondary)] mt-1">
+                        Private virtual environment containing SymPy &amp; Kaxe. Isolated from system Python.
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleRepairVenv}
+                      disabled={isRepairing || venvState.isSettingUp}
+                      className="shrink-0 ml-3 flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] text-xs font-medium border border-[var(--border-color)] transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${(isRepairing || venvState.isSettingUp) ? 'animate-spin' : ''}`} />
+                      <span>{isRepairing ? 'Repairing...' : 'Repair / Reinstall'}</span>
+                    </button>
+                  </div>
+
+                  {venvState.error && (
+                    <div className="mt-2.5 p-2 rounded bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>{venvState.error}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -37,6 +37,10 @@ math-field {
   border: none !important;
   box-shadow: none !important;
   background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  line-height: 1.25 !important;
 }
 
 math-field:focus,
@@ -102,7 +106,7 @@ math-field::part(menu-toggle) {
 
 /* Math typesetting */
 .maple-output .katex-display {
-  margin: 0.35rem 0 !important;
+  margin: 0.15rem 0 !important;
   color: var(--maple-blue);
   font-size: 1.25rem;
 }

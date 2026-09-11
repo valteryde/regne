@@ -29,6 +29,14 @@ export interface UpdaterState {
   error?: string | null;
 }
 
+export interface VenvSetupState {
+  isSettingUp: boolean;
+  message: string;
+  error: string | null;
+  venvPath: string;
+  ready: boolean;
+}
+
 export interface RegneAPI {
   saveDocument: (
     data: string,
@@ -53,6 +61,9 @@ export interface RegneAPI {
     evaluate: (id: string, code: string) => Promise<any>;
     reset: () => Promise<any>;
     interrupt: () => void;
+    getSetupStatus: () => Promise<VenvSetupState>;
+    reinstallVenv: () => Promise<{ success: boolean; error?: string }>;
+    onSetupProgress: (callback: (state: VenvSetupState) => void) => () => void;
   };
   updater: {
     getState: () => Promise<UpdaterState>;
@@ -112,6 +123,13 @@ const api: RegneAPI = {
     evaluate: (id: string, code: string) => ipcRenderer.invoke('cas:sympy:eval', { id, code }),
     reset: () => ipcRenderer.invoke('cas:sympy:reset'),
     interrupt: () => ipcRenderer.send('cas:sympy:interrupt'),
+    getSetupStatus: () => ipcRenderer.invoke('cas:sympy:setup-status'),
+    reinstallVenv: () => ipcRenderer.invoke('cas:sympy:reinstall-venv'),
+    onSetupProgress: (callback: (state: VenvSetupState) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, state: VenvSetupState) => callback(state);
+      ipcRenderer.on('cas:sympy:setup-progress', subscription);
+      return () => ipcRenderer.removeListener('cas:sympy:setup-progress', subscription);
+    },
   },
 
   updater: {

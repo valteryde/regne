@@ -782,11 +782,19 @@ class SymPyWorker:
         )
 
 
+def _get_install_hint() -> str:
+    is_brew = '/homebrew/' in sys.executable.lower() or '/cellar/' in sys.executable.lower()
+    if is_brew:
+        return "pip3 install --break-system-packages sympy kaxe"
+    return "pip install sympy kaxe"
+
+
 def main():
     if not SYMPY_AVAILABLE:
+        hint = _get_install_hint()
         print(json.dumps({
             "status": "error",
-            "error": f"SymPy module not found: {IMPORT_ERROR}. Run: pip install sympy"
+            "error": f"SymPy module not found ({IMPORT_ERROR}). Install with: {hint}"
         }), flush=True)
     else:
         print(json.dumps({
@@ -819,10 +827,11 @@ def main():
             continue
 
         if not SYMPY_AVAILABLE:
+            hint = _get_install_hint()
             print(json.dumps({
                 "id": req_id,
                 "success": False,
-                "error": "SymPy is not installed. Please run: pip install sympy"
+                "error": f"SymPy is not installed. Install with: {hint}"
             }), flush=True)
             continue
 

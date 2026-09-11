@@ -9,6 +9,7 @@ import { DocumentRuler } from './components/Ruler/DocumentRuler';
 import { ExportModal } from './components/Dialogs/ExportModal';
 import { SettingsModal } from './components/Dialogs/SettingsModal';
 import { UpdateNotification } from './components/Updater/UpdateNotification';
+import { VenvSetupBanner } from './components/Toolbar/VenvSetupBanner';
 
 const MainLayout: React.FC = () => {
   const { isRulerVisible, rulerPosition } = useDocument();
@@ -114,6 +115,9 @@ const MainLayout: React.FC = () => {
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsOpen(true)}
       />
+
+      {/* Dedicated Math Engine Setup Notification Banner */}
+      <VenvSetupBanner />
 
       {/* Main Document Workspace */}
       <div className="flex-1 flex overflow-hidden bg-[var(--bg-canvas)]">

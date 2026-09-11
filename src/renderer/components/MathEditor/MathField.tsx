@@ -164,6 +164,16 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
               opacity: 0 !important;
               pointer-events: none !important;
             }
+            /* Eliminate MathLive's default 39px min-height and container padding */
+            .ML__container {
+              min-height: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              align-items: center !important;
+            }
+            .ML__content {
+              padding: 1px 0 !important;
+            }
             /* Prevent dark/opaque background box over parentheses, fractions, or roots */
             .ML__contains-highlight {
               display: none !important;
@@ -280,8 +290,9 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
           outline: 'none',
           border: 'none',
           background: 'transparent',
-          padding: '2px 0px',
+          padding: '0px',
           minWidth: '60px',
+          lineHeight: '1.25',
           ['--contains-highlight-background-color' as any]: 'transparent',
           ['--contains-highlight-color' as any]: '#2563eb',
           ['--smart-fence-color' as any]: 'currentColor',

@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme } from 'electron
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, spawnSync } from 'child_process';
 import * as readline from 'readline';
 import { createApplicationMenu } from './menu';
 import { autoUpdater } from 'electron-updater';
@@ -280,22 +280,233 @@ ipcMain.handle('dialog:exportDocument', async (_event, { data, ext, filterName }
   }
 });
 
-// --- SymPy Worker Process Manager ---
+// --- SymPy Worker Process Manager with Dedicated Venv Auto-Provisioning ---
 class SympyProcessManager {
   private process: ChildProcess | null = null;
   private isReady: boolean = false;
   private statusError: string | null = null;
   private version: string | null = null;
+  private isSettingUp: boolean = false;
+  private setupMessage: string = '';
+  private setupError: string | null = null;
+  private setupPromise: Promise<boolean> | null = null;
+  private activePythonPath: string | null = null;
   private pendingRequests: Map<string, {
     resolve: (val: any) => void;
     reject: (err: any) => void;
   }> = new Map();
   private rl: readline.Interface | null = null;
 
-  public start(): void {
-    if (this.process) return;
+  private getVenvDir(): string {
+    return app
+      ? path.join(app.getPath('userData'), 'venv')
+      : path.resolve(process.cwd(), '.venv');
+  }
 
-    let workerScript = path.resolve(__dirname, '../../src/engine/sympyWorker.py');
+  private getVenvPythonPath(): string {
+    const venvDir = this.getVenvDir();
+    return process.platform === 'win32'
+      ? path.join(venvDir, 'Scripts', 'python.exe')
+      : path.join(venvDir, 'bin', 'python3');
+  }
+
+  private getVenvPipPath(): string {
+    const venvDir = this.getVenvDir();
+    return process.platform === 'win32'
+      ? path.join(venvDir, 'Scripts', 'pip.exe')
+      : path.join(venvDir, 'bin', 'pip');
+  }
+
+  private getExpandedEnv(): NodeJS.ProcessEnv {
+    const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (process.platform === 'darwin') {
+      const extraPaths = [
+        '/opt/homebrew/bin',
+        '/opt/homebrew/sbin',
+        '/usr/local/bin',
+        '/Library/Frameworks/Python.framework/Versions/Current/bin',
+        '/Library/Frameworks/Python.framework/Versions/3.13/bin',
+        '/Library/Frameworks/Python.framework/Versions/3.12/bin',
+        path.join(homeDir, '.local/bin'),
+        path.join(homeDir, '.pyenv/shims'),
+      ];
+      const validExtras = extraPaths.filter((p) => fsSync.existsSync(p));
+      if (validExtras.length > 0) {
+        env.PATH = validExtras.join(':') + (env.PATH ? `:${env.PATH}` : '');
+      }
+    }
+    return env;
+  }
+
+  private testPythonModule(pyBin: string, code: string): boolean {
+    try {
+      const res = spawnSync(pyBin, ['-c', code], {
+        env: this.getExpandedEnv(),
+        timeout: 2000,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      return res.status === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  public isDedicatedVenvReady(): boolean {
+    const venvPython = this.getVenvPythonPath();
+    if (!fsSync.existsSync(venvPython)) return false;
+    return this.testPythonModule(venvPython, 'import sympy');
+  }
+
+  private notifySetupProgress(isSettingUp: boolean, message: string, error: string | null = null, ready = false): void {
+    this.isSettingUp = isSettingUp;
+    this.setupMessage = message;
+    this.setupError = error;
+    const state = {
+      isSettingUp,
+      message,
+      error,
+      venvPath: this.getVenvDir(),
+      ready: this.isReady || ready,
+    };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cas:sympy:setup-progress', state);
+    }
+  }
+
+  private findBasePython(): string | null {
+    const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
+    const candidates: string[] = [];
+    if (process.platform === 'win32') {
+      candidates.push(
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python313/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python312/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python311/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python314/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python310/python.exe'),
+        path.join(homeDir, 'miniforge3/python.exe'),
+        path.join(homeDir, 'miniconda3/python.exe'),
+        path.join(homeDir, 'anaconda3/python.exe'),
+        'python.exe',
+        'python'
+      );
+    } else {
+      candidates.push(
+        '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
+        '/Library/Frameworks/Python.framework/Versions/3.12/bin/python3',
+        '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3',
+        '/Library/Frameworks/Python.framework/Versions/Current/bin/python3',
+        '/Library/Frameworks/Python.framework/Versions/3.14/bin/python3',
+        '/opt/homebrew/bin/python3',
+        '/usr/local/bin/python3',
+        path.join(homeDir, '.pyenv/shims/python3'),
+        path.join(homeDir, 'miniforge3/bin/python3'),
+        path.join(homeDir, 'miniconda3/bin/python3'),
+        path.join(homeDir, 'anaconda3/bin/python3'),
+        '/usr/bin/python3',
+        'python3'
+      );
+    }
+
+    for (const cand of candidates) {
+      if (path.isAbsolute(cand) && !fsSync.existsSync(cand)) continue;
+      if (this.testPythonModule(cand, 'import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)')) {
+        return cand;
+      }
+    }
+    return null;
+  }
+
+  private execAsync(cmd: string, args: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: this.getExpandedEnv(),
+      });
+
+      let stderr = '';
+      child.stderr?.on('data', (d) => {
+        stderr += d.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Command ${cmd} ${args.join(' ')} exited with code ${code}: ${stderr.trim()}`));
+        }
+      });
+
+      child.on('error', (err) => {
+        reject(err);
+      });
+    });
+  }
+
+  public async ensureVenv(forceReinstall = false): Promise<boolean> {
+    if (this.setupPromise) {
+      return this.setupPromise;
+    }
+
+    if (!forceReinstall && this.isDedicatedVenvReady()) {
+      return true;
+    }
+
+    this.setupPromise = (async () => {
+      try {
+        this.notifySetupProgress(true, 'Detecting host Python installation...');
+        const basePython = this.findBasePython();
+        if (!basePython) {
+          throw new Error('Python 3 was not detected on this system. Please install Python 3 (from python.org or Homebrew) and restart Regne.');
+        }
+
+        const venvDir = this.getVenvDir();
+        this.notifySetupProgress(true, 'Creating dedicated Regne virtual environment...');
+        const parentDir = path.dirname(venvDir);
+        if (!fsSync.existsSync(parentDir)) {
+          await fs.mkdir(parentDir, { recursive: true });
+        }
+
+        console.log(`[SymPy Manager] Bootstrapping dedicated venv at ${venvDir} using ${basePython}`);
+        await this.execAsync(basePython, ['-m', 'venv', '--clear', venvDir]);
+
+        const newVenvPython = this.getVenvPythonPath();
+        const newVenvPip = this.getVenvPipPath();
+        if (!fsSync.existsSync(newVenvPython) || !fsSync.existsSync(newVenvPip)) {
+          throw new Error(`Virtual environment created at ${venvDir}, but python or pip binaries were missing.`);
+        }
+
+        this.notifySetupProgress(true, 'Installing SymPy and mathematical packages...');
+        console.log(`[SymPy Manager] Installing packages with ${newVenvPip}`);
+
+        try {
+          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', 'sympy>=1.13.0', 'kaxe>=1.8.1']);
+        } catch (pipErr) {
+          console.warn('[SymPy Manager] Combined install failed, attempting sympy standalone:', pipErr);
+          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', 'sympy>=1.13.0']);
+        }
+
+        if (!this.testPythonModule(newVenvPython, 'import sympy')) {
+          throw new Error('SymPy verification failed after pip installation in virtual environment.');
+        }
+
+        console.log('[SymPy Manager] Dedicated venv provisioned successfully!');
+        this.notifySetupProgress(false, 'Dedicated math environment ready!', null, true);
+        return true;
+      } catch (err: any) {
+        console.error('[SymPy Manager] Venv provisioning failed:', err);
+        this.notifySetupProgress(false, 'Failed to set up math environment', err?.message || String(err), false);
+        return false;
+      } finally {
+        this.setupPromise = null;
+      }
+    })();
+
+    return this.setupPromise;
+  }
+
+  public getWorkerScriptPath(): string {
     if (app && app.isPackaged) {
       const packagedPaths = [
         path.join(process.resourcesPath, 'engine/sympyWorker.py'),
@@ -304,10 +515,7 @@ class SympyProcessManager {
         path.join(process.resourcesPath, 'app.asar.unpacked/dist/engine/sympyWorker.py'),
       ];
       for (const p of packagedPaths) {
-        if (fsSync.existsSync(p)) {
-          workerScript = p;
-          break;
-        }
+        if (fsSync.existsSync(p)) return p;
       }
     } else {
       const devPaths = [
@@ -317,13 +525,16 @@ class SympyProcessManager {
         path.join(process.cwd(), 'dist/engine/sympyWorker.py'),
       ];
       for (const p of devPaths) {
-        if (fsSync.existsSync(p)) {
-          workerScript = p;
-          break;
-        }
+        if (fsSync.existsSync(p)) return p;
       }
     }
+    return path.resolve(__dirname, '../../src/engine/sympyWorker.py');
+  }
 
+  public start(): void {
+    if (this.process) return;
+
+    const workerScript = this.getWorkerScriptPath();
     if (!fsSync.existsSync(workerScript)) {
       this.isReady = false;
       this.statusError = `SymPy worker script not found at: ${workerScript}`;
@@ -331,50 +542,81 @@ class SympyProcessManager {
       return;
     }
 
-    const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
-    let pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-
-    const candidatePythonPaths: string[] = [];
-    if (process.platform === 'win32') {
-      candidatePythonPaths.push(
-        path.resolve(process.cwd(), '.venv/Scripts/python.exe'),
-        path.join(homeDir, '.venv/Scripts/python.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python313/python.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python312/python.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python311/python.exe')
-      );
-    } else {
-      candidatePythonPaths.push(
-        path.resolve(process.cwd(), '.venv/bin/python3'),
-        path.join(homeDir, '.venv/bin/python3'),
-        '/opt/homebrew/bin/python3',
-        '/usr/local/bin/python3',
-        path.join(homeDir, '.pyenv/shims/python3')
-      );
+    // 1. If dedicated venv exists and has sympy, use it directly
+    if (this.isDedicatedVenvReady()) {
+      const venvPy = this.getVenvPythonPath();
+      console.log(`[SymPy Manager] Using dedicated Regne venv: ${venvPy}`);
+      this.spawnWorker(venvPy, workerScript);
+      return;
     }
 
-    for (const candidate of candidatePythonPaths) {
-      if (fsSync.existsSync(candidate)) {
-        pythonCmd = candidate;
+    // 2. If in development mode and local repository .venv has sympy, use it
+    const isWin = process.platform === 'win32';
+    const devPython = path.resolve(process.cwd(), isWin ? '.venv/Scripts/python.exe' : '.venv/bin/python3');
+    if (!app?.isPackaged && fsSync.existsSync(devPython) && this.testPythonModule(devPython, 'import sympy')) {
+      console.log(`[SymPy Manager] Using developer repository venv: ${devPython}`);
+      this.spawnWorker(devPython, workerScript);
+      return;
+    }
+
+    // 3. Check if any existing system Python has sympy
+    const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
+    const candidatePythons: string[] = isWin
+      ? [
+          path.join(homeDir, '.venv/Scripts/python.exe'),
+          path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python313/python.exe'),
+          path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python312/python.exe'),
+          'python.exe',
+        ]
+      : [
+          '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
+          '/Library/Frameworks/Python.framework/Versions/3.12/bin/python3',
+          '/usr/local/bin/python3',
+          '/opt/homebrew/bin/python3',
+          path.join(homeDir, '.venv/bin/python3'),
+          'python3',
+        ];
+
+    let systemPythonWithSympy: string | null = null;
+    for (const cand of candidatePythons) {
+      if (path.isAbsolute(cand) && !fsSync.existsSync(cand)) continue;
+      if (this.testPythonModule(cand, 'import sympy')) {
+        systemPythonWithSympy = cand;
         break;
       }
     }
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    if (process.platform === 'darwin') {
-      const extraPaths = [
-        '/opt/homebrew/bin',
-        '/opt/homebrew/sbin',
-        '/usr/local/bin',
-        path.join(homeDir, '.local/bin'),
-        path.join(homeDir, '.pyenv/shims'),
-      ];
-      const validExtras = extraPaths.filter((p) => fsSync.existsSync(p));
-      if (validExtras.length > 0) {
-        env.PATH = validExtras.join(':') + (env.PATH ? `:${env.PATH}` : '');
-      }
+    if (systemPythonWithSympy) {
+      // Spawn worker immediately so user has zero latency, while bootstrapping private venv in background
+      console.log(`[SymPy Manager] Spawning with available system Python ${systemPythonWithSympy} while preparing dedicated venv...`);
+      this.spawnWorker(systemPythonWithSympy, workerScript);
+      this.ensureVenv().then((ready) => {
+        if (ready) {
+          console.log('[SymPy Manager] Dedicated venv ready; switching worker to dedicated venv...');
+          this.stop();
+          this.spawnWorker(this.getVenvPythonPath(), workerScript);
+        }
+      });
+      return;
     }
 
+    // 4. No Python on machine has sympy -> We must bootstrap the dedicated venv
+    console.log('[SymPy Manager] No Python with SymPy detected. Bootstrapping dedicated Regne venv...');
+    this.ensureVenv().then((ready) => {
+      if (ready) {
+        this.spawnWorker(this.getVenvPythonPath(), workerScript);
+      } else {
+        this.isReady = false;
+        this.statusError = this.setupError || 'Failed to initialize mathematical solver environment.';
+      }
+    });
+  }
+
+  private spawnWorker(pythonCmd: string, workerScript: string): void {
+    if (this.process) return;
+
+    this.activePythonPath = pythonCmd;
+    const env = this.getExpandedEnv();
     let lastStderr = '';
 
     try {
@@ -394,6 +636,7 @@ class SympyProcessManager {
             this.isReady = true;
             this.statusError = null;
             this.version = data.version || null;
+            this.notifySetupProgress(false, `SymPy ${this.version} CAS Engine Active`, null, true);
           } else if (data.status === 'error') {
             this.isReady = false;
             this.statusError = data.error;
@@ -421,7 +664,7 @@ class SympyProcessManager {
         const detail = lastStderr.trim() ? `: ${lastStderr.trim()}` : '';
         const errMsg = `SymPy worker exited with code ${code}${detail}`;
         this.statusError = errMsg;
-        for (const [id, req] of this.pendingRequests.entries()) {
+        for (const [, req] of this.pendingRequests.entries()) {
           req.reject(new Error(errMsg));
         }
         this.pendingRequests.clear();
@@ -438,14 +681,47 @@ class SympyProcessManager {
     }
   }
 
-  public getStatus(): { ready: boolean; error: string | null; version: string | null } {
-    if (!this.process) {
+  public async reinstallVenv(): Promise<{ success: boolean; error?: string }> {
+    this.stop();
+    this.isReady = false;
+    const ok = await this.ensureVenv(true);
+    if (ok) {
+      this.start();
+      return { success: true };
+    }
+    return { success: false, error: this.setupError || 'Venv reinstallation failed' };
+  }
+
+  public getSetupStatus() {
+    return {
+      isSettingUp: this.isSettingUp,
+      message: this.setupMessage,
+      error: this.setupError,
+      venvPath: this.getVenvDir(),
+      ready: this.isReady,
+      activePython: this.activePythonPath,
+    };
+  }
+
+  public getStatus(): { ready: boolean; error: string | null; version: string | null; isSettingUp: boolean; setupMessage: string } {
+    if (!this.process && !this.isSettingUp) {
       this.start();
     }
-    return { ready: this.isReady, error: this.statusError, version: this.version };
+    return {
+      ready: this.isReady,
+      error: this.statusError,
+      version: this.version,
+      isSettingUp: this.isSettingUp,
+      setupMessage: this.setupMessage,
+    };
   }
 
   public async evaluate(id: string, code: string): Promise<any> {
+    // If venv setup is currently executing in background, wait for it
+    if (this.isSettingUp && this.setupPromise) {
+      await this.setupPromise;
+    }
+
     if (!this.process) {
       this.start();
     }
@@ -538,6 +814,14 @@ ipcMain.handle('cas:sympy:reset', async () => {
 
 ipcMain.on('cas:sympy:interrupt', () => {
   sympyManager.interrupt();
+});
+
+ipcMain.handle('cas:sympy:setup-status', async () => {
+  return sympyManager.getSetupStatus();
+});
+
+ipcMain.handle('cas:sympy:reinstall-venv', async () => {
+  return sympyManager.reinstallVenv();
 });
 
 // --- Auto Updater State & Controller ---

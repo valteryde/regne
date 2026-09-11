@@ -238,7 +238,7 @@ const MathLine: React.FC<MathLineProps> = memo(({
     <div
       data-element-id={id}
       data-element-idx={index}
-      className={`group py-1 px-1 my-1 cursor-text transition-colors select-text ${
+      className={`group py-[1px] px-1 cursor-text transition-colors select-text ${
         isSelected ? 'bg-[var(--selection-bg)] maple-selected' : 'bg-transparent'
       }`}
       style={backgroundColor ? { backgroundColor } : undefined}
@@ -251,7 +251,7 @@ const MathLine: React.FC<MathLineProps> = memo(({
       }}
     >
       {/* 2D Math formula */}
-      <div className="min-h-[36px] select-text">
+      <div className="min-h-[1.3em] select-text">
         <MathField
           ref={(h) => {
             mfHandleRef.current = h;
@@ -272,15 +272,15 @@ const MathLine: React.FC<MathLineProps> = memo(({
 
       {/* Evaluated Royal Blue 2D Result or Kaxe Plot */}
       {isEvaluating ? (
-        <div className="py-2 pl-6 font-mono text-xs text-[var(--text-muted)] italic select-text">
+        <div className="py-0.5 pl-6 font-mono text-xs text-[var(--text-muted)] italic select-text">
           Evaluating...
         </div>
       ) : error ? (
-        <div className="py-1 pl-6 text-red-600 text-xs font-mono select-text">
+        <div className="py-0.5 pl-6 text-red-600 text-xs font-mono select-text">
           {error}
         </div>
       ) : evaluated && (resultPlotSvg || resultType === 'plot') ? (
-        <div className="py-2 pl-6 select-text">
+        <div className="py-1.5 pl-6 select-text">
           <div className="relative group/plot inline-block w-full max-w-[560px] rounded border border-slate-200 bg-white p-2 shadow-xs transition-shadow hover:shadow-sm">
             <div
               className="w-full h-auto overflow-hidden [&>svg]:w-full [&>svg]:h-auto [&>svg]:block"
@@ -305,7 +305,7 @@ const MathLine: React.FC<MathLineProps> = memo(({
           </div>
         </div>
       ) : evaluated && resultLatex ? (
-        <div className="py-1.5 pl-6 select-text" style={color ? { color } : undefined}>
+        <div className="pt-0.5 pb-0.5 pl-6 select-text" style={color ? { color } : undefined}>
           <KaTeXRenderer
             math={resultLatex}
             displayMode={false}

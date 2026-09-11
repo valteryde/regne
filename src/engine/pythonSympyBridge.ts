@@ -88,13 +88,15 @@ export class PythonSymPyBridge implements ICasEngine {
           this.notifyScopeChange();
         }
 
-        if (!result.success && result.error && result.error.includes('SymPy is not installed')) {
-          this.setStatus('error');
+        if (!result.success) {
+          if (result.error && (result.error.toLowerCase().includes('sympy') || result.error.toLowerCase().includes('not installed'))) {
+            this.setStatus('error');
+          }
           return {
             id: request.id,
             success: false,
-            resultLatex: '\\text{\\color{red}{SymPy not installed. Run: pip install sympy}}',
-            resultText: 'SymPy not installed. Run: pip install sympy',
+            resultLatex: result.resultLatex || `\\text{\\color{red}{${result.error || 'SymPy evaluation failed'}}}`,
+            resultText: result.resultText || result.error || 'SymPy evaluation failed',
             resultType: 'error',
             executionTimeMs: result.executionTimeMs || (performance.now() - startTime),
             error: result.error,
