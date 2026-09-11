@@ -6,6 +6,7 @@ import { ChildProcess, spawn, spawnSync } from 'child_process';
 import * as readline from 'readline';
 import { createApplicationMenu } from './menu';
 import { autoUpdater } from 'electron-updater';
+import { macUpdater } from './macUpdater';
 
 // Set application name early so menu and system dialogs show "Regne"
 if (app) {
@@ -862,6 +863,15 @@ let updaterState: UpdaterState = {
 };
 
 let isManualCheck = false;
+let lastDiscoveredUpdateInfo: any = null;
+
+function applyUpdateAndRestart(): void {
+  if (process.platform === 'darwin') {
+    macUpdater.applyAndRestart();
+  } else {
+    autoUpdater.quitAndInstall();
+  }
+}
 
 function broadcastUpdaterState(partial: Partial<UpdaterState>) {
   updaterState = { ...updaterState, ...partial };
@@ -898,6 +908,51 @@ function startDownloadUpdate() {
     progress: { percent: 0, bytesPerSecond: 0, transferred: 0, total: 0 },
     error: null,
   });
+
+  if (process.platform === 'darwin') {
+    macUpdater
+      .downloadAndExtract(lastDiscoveredUpdateInfo, (progress) => {
+        broadcastUpdaterState({ status: 'downloading', progress });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:download-progress', progress);
+          mainWindow.setProgressBar(Math.min(Math.max(progress.percent / 100, 0), 1));
+        }
+      })
+      .then(({ version }) => {
+        console.log('[AutoUpdater] macOS Update downloaded and staged:', version);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setProgressBar(-1);
+        }
+        const infoPayload: UpdateInfo = {
+          version,
+        };
+        broadcastUpdaterState({ status: 'downloaded', info: infoPayload, error: null });
+        mainWindow?.webContents.send('updater:update-downloaded', infoPayload);
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          dialog
+            .showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Update Ready',
+              message: `Regne v${version} has been downloaded.`,
+              detail: 'Restart the application now to apply the update.',
+              buttons: ['Restart Now', 'Later'],
+              defaultId: 0,
+              cancelId: 1,
+            })
+            .then(({ response }) => {
+              if (response === 0) {
+                applyUpdateAndRestart();
+              }
+            });
+        }
+      })
+      .catch((err: any) => {
+        handleUpdaterError(err);
+      });
+    return;
+  }
+
   autoUpdater.downloadUpdate().catch((err: any) => {
     handleUpdaterError(err);
   });
@@ -927,6 +982,114 @@ async function performUpdateCheck(manual = true) {
   }
 }
 
+function cleanNotesText(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+
+  let text = raw;
+
+  // 1. Normalize line breaks
+  text = text.replace(/\r\n?/g, '\n');
+
+  // 2. Convert links before stripping tags
+  // HTML links: <a href="url">text</a>
+  text = text.replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, inner) => {
+    const cleanInner = inner.replace(/<[^>]+>/g, '').trim();
+    const cleanHref = (href || '').trim();
+    if (!cleanHref) return cleanInner;
+    if (!cleanInner) return cleanHref;
+    if (cleanHref === cleanInner || cleanHref.endsWith(cleanInner)) {
+      return cleanHref;
+    }
+    return `${cleanInner} (${cleanHref})`;
+  });
+
+  // Markdown links: [text](url)
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
+    const cleanLabel = label.trim();
+    const cleanUrl = url.trim();
+    if (cleanUrl === cleanLabel || cleanUrl.endsWith(cleanLabel)) {
+      return cleanUrl;
+    }
+    return `${cleanLabel} (${cleanUrl})`;
+  });
+
+  // 3. Block level elements to line breaks
+  text = text.replace(/\s*<br\s*\/?>\s*/gi, '\n');
+  text = text.replace(/\s*<\/(p|div|h[1-6])>\s*/gi, '\n\n');
+  text = text.replace(/\s*<li\b[^>]*>\s*/gi, '\n• ');
+  text = text.replace(/\s*<\/li>\s*/gi, '\n');
+  text = text.replace(/\s*<\/(ul|ol)>\s*/gi, '\n\n');
+  text = text.replace(/\s*<(ul|ol)\b[^>]*>\s*/gi, '\n');
+  text = text.replace(/\s*<hr\s*\/?>\s*/gi, '\n---\n');
+
+  // 4. Strip remaining HTML tags
+  text = text.replace(/<[^>]+>/g, '');
+
+  // 5. Decode HTML entities
+  text = text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+
+  // 6. Clean up Markdown headings & bullets
+  text = text.replace(/^#{1,6}\s+(.*)$/gm, '$1:');
+  text = text.replace(/^\s*[-*+]\s+/gm, '• ');
+
+  // 7. Strip bold/italic/code markdown
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+  text = text.replace(/\*([^*]+)\*/g, '$1');
+  text = text.replace(/__([^_]+)__/g, '$1');
+  text = text.replace(/_([^_]+)_/g, '$1');
+  text = text.replace(/`([^`]+)`/g, '$1');
+
+  // 8. Clean up whitespace
+  text = text
+    .split('\n')
+    .map(line => line.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/(•[^\n]+)\n\n+(?=•)/g, '$1\n')
+    .trim();
+
+  // 9. Cap length to avoid excessively tall message boxes
+  if (text.length > 800) {
+    text = text.slice(0, 797).trim() + '...';
+  }
+
+  return text;
+}
+
+function formatReleaseNotes(releaseNotes: unknown): string {
+  if (!releaseNotes) return '';
+
+  if (Array.isArray(releaseNotes)) {
+    return releaseNotes
+      .map((item) => {
+        if (typeof item === 'string') return cleanNotesText(item);
+        if (item && typeof item === 'object') {
+          const note = 'note' in item ? (item as any).note : '';
+          const version = 'version' in item ? (item as any).version : '';
+          const cleaned = typeof note === 'string' ? cleanNotesText(note) : '';
+          return version && cleaned ? `v${version}:\n${cleaned}` : cleaned;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  if (typeof releaseNotes === 'string') {
+    return cleanNotesText(releaseNotes);
+  }
+
+  return '';
+}
+
 function setupAutoUpdater(): void {
   // Configure logging
   autoUpdater.logger = {
@@ -947,10 +1110,12 @@ function setupAutoUpdater(): void {
 
   autoUpdater.on('update-available', (info) => {
     console.log('[AutoUpdater] Update available:', info.version);
+    lastDiscoveredUpdateInfo = info;
+    const formattedNotes = formatReleaseNotes(info.releaseNotes);
     const infoPayload: UpdateInfo = {
       version: info.version,
       releaseDate: info.releaseDate,
-      releaseNotes: info.releaseNotes,
+      releaseNotes: formattedNotes || (typeof info.releaseNotes === 'string' ? info.releaseNotes : null),
     };
     broadcastUpdaterState({ status: 'available', info: infoPayload, error: null });
     mainWindow?.webContents.send('updater:update-available', infoPayload);
@@ -958,13 +1123,16 @@ function setupAutoUpdater(): void {
     if (isManualCheck) {
       isManualCheck = false;
       if (mainWindow && !mainWindow.isDestroyed()) {
+        const promptQuestion = 'Would you like to download and install this update now?';
+        const detail = formattedNotes
+          ? `${formattedNotes}\n\n${promptQuestion}`
+          : promptQuestion;
+
         dialog.showMessageBox(mainWindow, {
           type: 'info',
           title: 'Update Available',
           message: `A new version of Regne is available (v${info.version}).`,
-          detail: typeof info.releaseNotes === 'string'
-            ? info.releaseNotes
-            : 'Would you like to download and install this update now?',
+          detail,
           buttons: ['Download Update', 'Later'],
           defaultId: 0,
           cancelId: 1,
@@ -1029,7 +1197,7 @@ function setupAutoUpdater(): void {
         cancelId: 1,
       }).then(({ response }) => {
         if (response === 0) {
-          autoUpdater.quitAndInstall();
+          applyUpdateAndRestart();
         }
       });
     }
@@ -1054,7 +1222,7 @@ ipcMain.handle('updater:download', async () => {
 });
 
 ipcMain.handle('updater:install-now', async () => {
-  autoUpdater.quitAndInstall();
+  applyUpdateAndRestart();
 });
 
 ipcMain.handle('app:get-version', () => {
