@@ -107,6 +107,7 @@ export class PythonSymPyBridge implements ICasEngine {
           resultLatex: result.resultLatex,
           resultText: result.resultText,
           resultType: result.resultType || (result.success ? 'expression' : 'error'),
+          plotSvg: result.plotSvg,
           executionTimeMs: result.executionTimeMs || (performance.now() - startTime),
           assignedVariables: result.assignedVariables,
           error: result.error,

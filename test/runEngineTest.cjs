@@ -93,6 +93,28 @@ async function testSympyWorker() {
   console.assert(scopeRes.success && scopeRes.scope['radius'], 'Scope missing radius');
   console.log('✓ Verified variable in session scope. Variables count:', Object.keys(scopeRes.scope).length);
 
+  // Test 6: Function Plotting with Kaxe
+  const plotRes = await send({ id: 'plot1', action: 'eval', code: 'plot(sin(x), x = -5..5)' });
+  console.assert(plotRes.success && plotRes.resultType === 'plot', 'plot(sin(x), x = -5..5) failed');
+  console.assert(plotRes.plotSvg && plotRes.plotSvg.includes('<svg') && plotRes.plotSvg.includes('</svg>'), 'plotSvg invalid');
+  console.log(`✓ plot(sin(x), x = -5..5) -> generated SVG (${plotRes.plotSvg.length} bytes)`);
+
+  // Test 6b: Auto domain plot
+  const plotAutoRes = await send({ id: 'plot2', action: 'eval', code: 'plot(x^2 - 4)' });
+  console.assert(plotAutoRes.success && plotAutoRes.resultType === 'plot', 'plot(x^2 - 4) failed');
+  console.log(`✓ plot(x^2 - 4) -> generated SVG (${plotAutoRes.plotSvg.length} bytes)`);
+
+  // Test 6c: Plotting user defined function
+  await send({ id: 'def_fn', action: 'eval', code: 'f(x) := x^3 - 3*x' });
+  const plotUserRes = await send({ id: 'plot3', action: 'eval', code: 'plot(f(x))' });
+  console.assert(plotUserRes.success && plotUserRes.resultType === 'plot', 'plot(f(x)) failed');
+  console.log(`✓ plot(f(x)) -> user function plot generated SVG (${plotUserRes.plotSvg.length} bytes)`);
+
+  // Test 6d: Plotting non-function error handling
+  const plotErrRes = await send({ id: 'plot4', action: 'eval', code: 'plot(Matrix([[1, 2], [3, 4]]))' });
+  console.assert(!plotErrRes.success && plotErrRes.error.includes('Plotting is only supported for'), 'Non-function error handling failed');
+  console.log('✓ plot(Matrix(...)) -> correctly rejected with descriptive error');
+
   proc.kill();
 }
 

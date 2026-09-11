@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -13,6 +13,11 @@ if (app) {
   if (typeof app.setName === 'function') {
     app.setName('Regne');
   }
+}
+
+// Force light theme mode so MathLive and embedded components do not apply dark-mode overrides
+if (nativeTheme) {
+  nativeTheme.themeSource = 'light';
 }
 
 export function getAppIconPath(): string {

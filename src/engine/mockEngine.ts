@@ -137,6 +137,20 @@ export class MockCasEngine implements ICasEngine {
         };
       }
 
+      // Plot command handling
+      if (code.startsWith('plot(') || code.startsWith('\\operatorname{plot}(')) {
+        this.setStatus('ready');
+        return {
+          id: request.id,
+          success: true,
+          resultType: 'plot',
+          resultLatex: '\\text{Plot}',
+          resultText: code,
+          plotSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250" width="400" height="250"><rect width="400" height="250" fill="#f8fafc" stroke="#cbd5e1"/><line x1="50" y1="200" x2="350" y2="200" stroke="#64748b" stroke-width="1.5"/><line x1="200" y1="20" x2="200" y2="230" stroke="#64748b" stroke-width="1.5"/><path d="M 50 180 Q 200 40 350 180" fill="none" stroke="#242e84" stroke-width="2.5"/><text x="200" y="240" text-anchor="middle" font-size="12" fill="#64748b">x</text><text x="30" y="125" text-anchor="middle" font-size="12" fill="#64748b">y</text></svg>',
+          executionTimeMs: performance.now() - startTime,
+        };
+      }
+
       // Check symbolic transforms (Calculus, Algebra, Solvers)
       const mockResult = this.applyMockCasTransforms(code);
       if (mockResult) {

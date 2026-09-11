@@ -109,7 +109,11 @@ export const MainRibbon: React.FC = () => {
         } else {
           activeMathField.executeCommand(['applyStyle', { color: color || undefined }]);
         }
-        activeMathField.focus();
+        try {
+          activeMathField.focus({ preventScroll: true });
+        } catch {
+          activeMathField.focus();
+        }
         return;
       }
     }
@@ -164,7 +168,11 @@ export const MainRibbon: React.FC = () => {
       } else if (cmd === 'italic') {
         activeMathField.executeCommand(['applyStyle', { shape: 'italic' }]);
       }
-      activeMathField.focus();
+      try {
+        activeMathField.focus({ preventScroll: true });
+      } catch {
+        activeMathField.focus();
+      }
       return;
     }
 

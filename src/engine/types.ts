@@ -10,6 +10,7 @@ export type CasResultType =
   | 'expression' 
   | 'equation' 
   | 'matrix' 
+  | 'plot'
   | 'text' 
   | 'error' 
   | 'void';
@@ -35,6 +36,7 @@ export interface CasEvaluationResult {
   resultLatex?: string;
   resultText?: string;
   resultType: CasResultType;
+  plotSvg?: string;
   consoleOutput?: string;
   assignedVariables?: CasVariable[];
   executionTimeMs: number;

@@ -25,6 +25,8 @@ export interface MathElement {
   isEvaluating?: boolean;
   resultLatex?: string;
   resultText?: string;
+  resultPlotSvg?: string;
+  resultType?: string;
   error?: string;
   color?: string;
   backgroundColor?: string;

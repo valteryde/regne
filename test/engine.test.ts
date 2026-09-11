@@ -36,6 +36,11 @@ async function runTests() {
   console.assert(scope['radius'] && scope['radius'].valueText === '5', 'Scope memory failed');
   console.log('✓ Assignment radius := 5 stored in scope. Variables count:', Object.keys(scope).length);
 
+  // Test 4b: Mock Plot evaluation
+  const plotRes = await engine.evaluate({ id: '5b', code: 'plot(sin(x), x = -5..5);' });
+  console.assert(plotRes.success && plotRes.resultType === 'plot', 'Plot evaluation failed');
+  console.log('✓ Mock plot evaluation -> resultType:', plotRes.resultType);
+
   // Test 5: Engine Manager Registry & Switching
   const manager = EngineManager.getInstance();
   await manager.initialize();

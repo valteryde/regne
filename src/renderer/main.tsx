@@ -28,6 +28,26 @@ if (typeof Element !== 'undefined') {
           opacity: 0 !important;
           pointer-events: none !important;
         }
+
+        /* Prevent dark/opaque background box over parentheses, fractions, or roots */
+        .ML__contains-highlight {
+          display: none !important;
+          background: transparent !important;
+        }
+
+        /* Delimiters (parentheses, brackets) keep normal formula text color */
+        .ML__contains-caret.ML__close,
+        .ML__contains-caret.ML__open,
+        .ML__contains-caret > .ML__close,
+        .ML__contains-caret > .ML__open {
+          color: inherit !important;
+          opacity: 1 !important;
+        }
+
+        .ML__smart-fence__close {
+          color: inherit !important;
+          opacity: 1 !important;
+        }
       `;
       shadow.appendChild(style);
     }

@@ -43,34 +43,51 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
   ) => {
     const mfRef = useRef<MathfieldElement | null>(null);
 
+    // Keep callback refs stable so event listeners are attached only once
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
+
+    const onEvaluateRef = useRef(onEvaluate);
+    onEvaluateRef.current = onEvaluate;
+
+    const onDeleteRef = useRef(onDelete);
+    onDeleteRef.current = onDelete;
+
+    const onFocusRef = useRef(onFocus);
+    onFocusRef.current = onFocus;
+
+    const onNavigateUpRef = useRef(onNavigateUp);
+    onNavigateUpRef.current = onNavigateUp;
+
+    const onNavigateDownRef = useRef(onNavigateDown);
+    onNavigateDownRef.current = onNavigateDown;
+
     useImperativeHandle(ref, () => ({
       insert: (snippet: string) => {
         const mf = mfRef.current;
         if (mf) {
           mf.executeCommand(['insert', snippet]);
-          mf.focus();
+          try {
+            mf.focus({ preventScroll: true });
+          } catch {
+            mf.focus();
+          }
         }
       },
       focus: (atEnd = false) => {
         const mf = mfRef.current;
         if (mf) {
-          mf.focus();
+          try {
+            mf.focus({ preventScroll: true });
+          } catch {
+            mf.focus();
+          }
           const cmd = atEnd ? 'moveToMathfieldEnd' : 'moveToMathfieldStart';
           try {
             mf.executeCommand(cmd);
           } catch {
             // fallback
           }
-          requestAnimationFrame(() => {
-            if (mf) {
-              mf.focus();
-              try {
-                mf.executeCommand(cmd);
-              } catch {
-                // fallback
-              }
-            }
-          });
         }
       },
       getValue: () => {
@@ -78,18 +95,45 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
       },
     }));
 
+    // Main initialization effect - runs on mount and when readOnly changes
     useEffect(() => {
       const mf = mfRef.current;
       if (!mf) return;
 
       mf.readOnly = readOnly;
-      mf.smartFence = true;
+      mf.smartFence = false;
       mf.smartSuperscript = true;
+      (mf as any).mathVirtualKeyboardPolicy = 'manual';
+
+      // Override MathLive's default onScrollIntoView hook.
+      // By default, MathLive calls this.host.scrollIntoView({ block: 'nearest' })
+      // on EVERY keystroke, which violently jerks the parent document scroll container
+      // up and down. We replace this with a container-aware check that ONLY scrolls if
+      // the field is actually outside the visible viewport.
+      (mf as any).onScrollIntoView = () => {
+        const host = mfRef.current;
+        if (!host) return;
+
+        const container = host.closest('.overflow-y-auto') as HTMLElement | null;
+        if (!container) return;
+
+        const hostRect = host.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const PADDING = 24;
+
+        if (hostRect.bottom > containerRect.bottom - PADDING) {
+          const diff = hostRect.bottom - (containerRect.bottom - PADDING);
+          container.scrollBy({ top: diff, behavior: 'auto' });
+        } else if (hostRect.top < containerRect.top + PADDING) {
+          const diff = hostRect.top - (containerRect.top + PADDING);
+          container.scrollBy({ top: diff, behavior: 'auto' });
+        }
+      };
 
       // Make CAS function names render upright (not italic/cursive)
       try {
         const casFunctions = [
-          'solve', 'diff', 'factor', 'expand', 'simplify',
+          'plot', 'solve', 'diff', 'factor', 'expand', 'simplify',
           'integrate', 'limit', 'series', 'det', 'inv',
           'trace', 'rank', 'subs', 'evalf', 'restart',
           'collect', 'cancel', 'apart', 'together', 'radsimp',
@@ -114,7 +158,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
       }
 
       // Hide toggles and hamburger menu inside shadowRoot
-      const hideToggles = () => {
+      const applyHideTogglesStyle = () => {
         if (!mf.shadowRoot) return;
 
         if (!mf.shadowRoot.querySelector('style[data-hide-toggles]')) {
@@ -137,55 +181,48 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
               opacity: 0 !important;
               pointer-events: none !important;
             }
+            /* Prevent dark/opaque background box over parentheses, fractions, or roots */
+            .ML__contains-highlight {
+              display: none !important;
+              background: transparent !important;
+            }
+            .ML__contains-caret.ML__close,
+            .ML__contains-caret.ML__open,
+            .ML__contains-caret > .ML__close,
+            .ML__contains-caret > .ML__open {
+              color: var(--contains-highlight-color, #2563eb) !important;
+              opacity: 1 !important;
+            }
+            .ML__smart-fence__close {
+              opacity: 0.6 !important;
+              color: inherit !important;
+            }
           `;
           mf.shadowRoot.appendChild(style);
         }
-
-        const elements = mf.shadowRoot.querySelectorAll(
-          '.ML__toggles, .ML__menu-toggle, [part="menu-toggle"], [part="virtual-keyboard-toggle"]'
-        );
-        elements.forEach((el) => {
-          const htmlEl = el as HTMLElement;
-          htmlEl.style.setProperty('display', 'none', 'important');
-          htmlEl.style.setProperty('width', '0', 'important');
-          htmlEl.style.setProperty('height', '0', 'important');
-          htmlEl.style.setProperty('visibility', 'hidden', 'important');
-        });
       };
 
-      hideToggles();
+      applyHideTogglesStyle();
+      requestAnimationFrame(applyHideTogglesStyle);
 
-      let observer: MutationObserver | null = null;
-      if (mf.shadowRoot) {
-        observer = new MutationObserver(() => {
-          hideToggles();
-        });
-        observer.observe(mf.shadowRoot, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ['style', 'class'],
-        });
-      }
-
-      if (mf.value !== value) {
+      if (value && mf.value !== value) {
         (mf as any).setValue(value, { suppressChangeNotifications: true });
       }
 
       const handleInput = () => {
-        if (onChange) {
-          onChange(mf.value);
+        if (onChangeRef.current && mfRef.current) {
+          onChangeRef.current(mfRef.current.value);
         }
       };
 
       const handleMoveOut = (e: any) => {
         const dir = e.detail?.direction;
-        if ((dir === 'upward' || dir === 'up') && onNavigateUp) {
+        if ((dir === 'upward' || dir === 'up') && onNavigateUpRef.current) {
           e.preventDefault?.();
-          onNavigateUp();
-        } else if ((dir === 'downward' || dir === 'down') && onNavigateDown) {
+          onNavigateUpRef.current();
+        } else if ((dir === 'downward' || dir === 'down') && onNavigateDownRef.current) {
           e.preventDefault?.();
-          onNavigateDown();
+          onNavigateDownRef.current();
         }
       };
 
@@ -193,21 +230,21 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           e.stopPropagation();
-          if (onEvaluate) {
-            onEvaluate();
+          if (onEvaluateRef.current) {
+            onEvaluateRef.current();
           }
         } else if (e.key === 'Backspace' && (!mf.value || mf.value.trim() === '')) {
-          if (onDelete) {
+          if (onDeleteRef.current) {
             e.preventDefault();
             e.stopPropagation();
-            onDelete();
+            onDeleteRef.current();
           }
         }
       };
 
       const handleFocus = () => {
-        if (onFocus) {
-          onFocus();
+        if (onFocusRef.current) {
+          onFocusRef.current();
         }
       };
 
@@ -217,19 +254,25 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
       mf.addEventListener('focus', handleFocus);
 
       return () => {
-        observer?.disconnect();
         mf.removeEventListener('input', handleInput);
         mf.removeEventListener('keydown', handleKeyDown, true);
         mf.removeEventListener('move-out', handleMoveOut);
         mf.removeEventListener('focus', handleFocus);
       };
-    }, [readOnly, onChange, onEvaluate, onDelete, onFocus, onNavigateUp, onNavigateDown, value]);
+    }, [readOnly]);
 
-    // Keep value synchronized if changed externally
+    // Keep value synchronized ONLY when changed externally (never while user is typing in this field)
     useEffect(() => {
       const mf = mfRef.current;
-      if (mf && mf.value !== value) {
-        (mf as any).setValue(value, { suppressChangeNotifications: true });
+      if (!mf) return;
+
+      const isFocused =
+        mf.hasFocus?.() ||
+        document.activeElement === mf ||
+        mf.shadowRoot?.contains(document.activeElement);
+
+      if (!isFocused && mf.value !== value) {
+        (mf as any).setValue(value || '', { suppressChangeNotifications: true });
       }
     }, [value]);
 
@@ -239,12 +282,16 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         style={{
           fontSize,
           color: color || (readOnly ? 'var(--math-output-color)' : 'var(--math-input-color)'),
-          display: 'inline-block',
+          display: 'block',
           outline: 'none',
           border: 'none',
           background: 'transparent',
           padding: '2px 0px',
           minWidth: '60px',
+          ['--contains-highlight-background-color' as any]: 'transparent',
+          ['--contains-highlight-color' as any]: '#2563eb',
+          ['--smart-fence-color' as any]: 'currentColor',
+          ['--smart-fence-opacity' as any]: '0.6',
         }}
         className={`select-text ${readOnly ? 'cursor-default' : 'cursor-text'} ${className}`}
       />

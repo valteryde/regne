@@ -83,7 +83,11 @@ const TextLine: React.FC<TextLineProps> = memo(({
       onClick={() => {
         if (!isSelected) {
           onFocus();
-          elRef.current?.focus();
+          try {
+            elRef.current?.focus({ preventScroll: true });
+          } catch {
+            elRef.current?.focus();
+          }
         }
       }}
     >
@@ -185,6 +189,9 @@ interface MathLineProps {
   input: string;
   evaluated: boolean;
   resultLatex?: string;
+  resultText?: string;
+  resultPlotSvg?: string;
+  resultType?: string;
   error?: string;
   isEvaluating?: boolean;
   color?: string;
@@ -192,7 +199,7 @@ interface MathLineProps {
   isActive: boolean;
   isSelected: boolean;
   onFocus: () => void;
-  onChange: (latex: string) => void;
+  onChange: (newContent: string) => void;
   onEvaluate: () => void;
   onDeleteEmpty: () => void;
   onNavigateUp: () => void;
@@ -207,6 +214,9 @@ const MathLine: React.FC<MathLineProps> = memo(({
   input,
   evaluated,
   resultLatex,
+  resultText,
+  resultPlotSvg,
+  resultType,
   error,
   isEvaluating,
   color,
@@ -260,7 +270,7 @@ const MathLine: React.FC<MathLineProps> = memo(({
         />
       </div>
 
-      {/* Evaluated Royal Blue 2D Result */}
+      {/* Evaluated Royal Blue 2D Result or Kaxe Plot */}
       {isEvaluating ? (
         <div className="py-2 pl-6 font-mono text-xs text-[var(--text-muted)] italic select-text">
           Evaluating...
@@ -268,6 +278,31 @@ const MathLine: React.FC<MathLineProps> = memo(({
       ) : error ? (
         <div className="py-1 pl-6 text-red-600 text-xs font-mono select-text">
           {error}
+        </div>
+      ) : evaluated && (resultPlotSvg || resultType === 'plot') ? (
+        <div className="py-2 pl-6 select-text">
+          <div className="relative group/plot inline-block w-full max-w-[560px] rounded border border-slate-200 bg-white p-2 shadow-xs transition-shadow hover:shadow-sm">
+            <div
+              className="w-full h-auto overflow-hidden [&>svg]:w-full [&>svg]:h-auto [&>svg]:block"
+              dangerouslySetInnerHTML={{ __html: resultPlotSvg || '' }}
+            />
+            {/* Quick Action to copy SVG code */}
+            <div className="absolute top-2 right-2 opacity-0 group-hover/plot:opacity-100 transition-opacity flex items-center gap-1 bg-white/90 backdrop-blur-xs border border-slate-200 rounded px-1.5 py-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (resultPlotSvg) {
+                    navigator.clipboard.writeText(resultPlotSvg);
+                  }
+                }}
+                className="text-[10px] text-slate-600 hover:text-slate-900 cursor-pointer font-sans select-none"
+                title="Copy SVG to clipboard"
+              >
+                Copy SVG
+              </button>
+            </div>
+          </div>
         </div>
       ) : evaluated && resultLatex ? (
         <div className="py-1.5 pl-6 select-text" style={color ? { color } : undefined}>
@@ -355,7 +390,11 @@ export const MapleDocument: React.FC<MapleDocumentProps> = ({ containerRef: exte
     // 1. Try section refs
     const secEl = sectionRefs.current.get(id);
     if (secEl && document.body.contains(secEl)) {
-      secEl.focus();
+      try {
+        secEl.focus({ preventScroll: true });
+      } catch {
+        secEl.focus();
+      }
       try {
         const sel = window.getSelection();
         if (sel) {
@@ -382,7 +421,11 @@ export const MapleDocument: React.FC<MapleDocumentProps> = ({ containerRef: exte
     // 3. Try text refs
     const textEl = textRefs.current.get(id);
     if (textEl && document.body.contains(textEl)) {
-      textEl.focus();
+      try {
+        textEl.focus({ preventScroll: true });
+      } catch {
+        textEl.focus();
+      }
       try {
         const sel = window.getSelection();
         if (sel) {
@@ -405,12 +448,20 @@ export const MapleDocument: React.FC<MapleDocumentProps> = ({ containerRef: exte
       if (row) {
         const mfEl = row.querySelector('math-field') as any;
         if (mfEl && typeof mfEl.focus === 'function') {
-          mfEl.focus();
+          try {
+            mfEl.focus({ preventScroll: true });
+          } catch {
+            mfEl.focus();
+          }
           return true;
         }
         const ceEl = row.querySelector('[contenteditable="true"]') as HTMLElement | null;
         if (ceEl) {
-          ceEl.focus();
+          try {
+            ceEl.focus({ preventScroll: true });
+          } catch {
+            ceEl.focus();
+          }
           activeInputRef.current = ceEl as any;
           return true;
         }
@@ -430,6 +481,21 @@ export const MapleDocument: React.FC<MapleDocumentProps> = ({ containerRef: exte
 
       if (focusElementById(id, atEnd)) {
         pendingFocusIdRef.current = null;
+        // If navigating to an element that is outside the container view, scroll gently to reveal it
+        const container = containerRef.current;
+        if (container) {
+          const row = container.querySelector(`[data-element-id="${id}"]`) as HTMLElement | null;
+          if (row) {
+            const rowRect = row.getBoundingClientRect();
+            const contRect = container.getBoundingClientRect();
+            const pad = 24;
+            if (rowRect.bottom > contRect.bottom - pad) {
+              container.scrollBy({ top: rowRect.bottom - (contRect.bottom - pad), behavior: 'smooth' });
+            } else if (rowRect.top < contRect.top + pad) {
+              container.scrollBy({ top: rowRect.top - (contRect.top + pad), behavior: 'smooth' });
+            }
+          }
+        }
         return;
       }
 
@@ -439,7 +505,7 @@ export const MapleDocument: React.FC<MapleDocumentProps> = ({ containerRef: exte
     };
 
     tryFocus(attempts);
-  }, [focusElementById, setActiveElementId]);
+  }, [focusElementById, setActiveElementId, containerRef]);
 
   // Focus an element by index
   const focusElement = useCallback((index: number, atEnd = false) => {
@@ -969,6 +1035,9 @@ export const MapleDocument: React.FC<MapleDocumentProps> = ({ containerRef: exte
                 input={el.input}
                 evaluated={el.evaluated}
                 resultLatex={el.resultLatex}
+                resultText={el.resultText}
+                resultPlotSvg={el.resultPlotSvg}
+                resultType={el.resultType}
                 error={el.error}
                 isEvaluating={el.isEvaluating}
                 color={el.color}

@@ -28,6 +28,10 @@ math-field {
   -webkit-user-select: text !important;
   --selection-background-color: var(--selection-bg);
   --caret-color: var(--text-primary);
+  --contains-highlight-background-color: transparent !important;
+  --contains-highlight-color: currentColor;
+  --smart-fence-color: currentColor;
+  --smart-fence-opacity: 1;
   color: var(--math-input-color);
   outline: none !important;
   border: none !important;

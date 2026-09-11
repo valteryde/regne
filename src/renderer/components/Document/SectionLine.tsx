@@ -80,7 +80,11 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
       onClick={() => {
         if (!isSelected) {
           onFocus();
-          elRef.current?.focus();
+          try {
+            elRef.current?.focus({ preventScroll: true });
+          } catch {
+            elRef.current?.focus();
+          }
         }
       }}
     >

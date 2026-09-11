@@ -605,12 +605,16 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         isEvaluating: false,
         resultLatex: result.resultLatex,
         resultText: result.resultText,
+        resultPlotSvg: result.plotSvg,
+        resultType: result.resultType,
         error: result.error,
       });
     } catch (err: any) {
       updateElement(id, {
         evaluated: true,
         isEvaluating: false,
+        resultPlotSvg: undefined,
+        resultType: 'error',
         error: err?.message || 'Evaluation error',
       });
     }
@@ -639,7 +643,11 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     if (activeMathField && 'executeCommand' in activeMathField) {
       (activeMathField as any).executeCommand(['insert', snippet]);
-      (activeMathField as any).focus();
+      try {
+        (activeMathField as any).focus({ preventScroll: true });
+      } catch {
+        (activeMathField as any).focus();
+      }
       return;
     }
 
@@ -647,7 +655,11 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (input) {
       if ('executeCommand' in input) {
         (input as any).executeCommand(['insert', snippet]);
-        input.focus();
+        try {
+          (input as any).focus({ preventScroll: true });
+        } catch {
+          (input as any).focus();
+        }
         return;
       }
 
@@ -664,7 +676,11 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       (input as HTMLTextAreaElement).value = nextVal;
       const newPos = start + snippet.length;
       (input as HTMLTextAreaElement).setSelectionRange(newPos, newPos);
-      input.focus();
+      try {
+        (input as HTMLElement).focus({ preventScroll: true });
+      } catch {
+        (input as HTMLElement).focus();
+      }
 
       const event = new Event('input', { bubbles: true });
       input.dispatchEvent(event);
@@ -679,7 +695,11 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         if ('executeCommand' in newMf) {
           newMf.executeCommand(['insert', snippet]);
         }
-        newMf.focus();
+        try {
+          newMf.focus({ preventScroll: true });
+        } catch {
+          newMf.focus();
+        }
       }
     }, 60);
   }, [activeElementId, insertElement]);

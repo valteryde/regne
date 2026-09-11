@@ -10,6 +10,23 @@ import json
 import re
 import time
 import traceback
+import io
+import logging
+
+# Suppress kaxe INFO logs so stdout remains pristine JSON
+logging.disable(logging.INFO)
+
+try:
+    import kaxe
+    KAXE_AVAILABLE = True
+except ImportError:
+    KAXE_AVAILABLE = False
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
 
 try:
     import sympy
@@ -153,6 +170,10 @@ class SymPyWorker:
             if new_s == s:
                 break
             s = new_s
+
+        # Normalize range dots: \ldotp\ldotp, \ldots, \dots -> ..
+        s = s.replace(r'\ldotp\ldotp', '..').replace(r'\ldotp \ldotp', '..')
+        s = s.replace(r'\ldots', '..').replace(r'\dots', '..')
 
         # Derivatives: \frac{d}{dx} expr or \frac{d}{dx}(expr)
         while r'\frac{d}{d' in s:
@@ -329,6 +350,149 @@ class SymPyWorker:
 
         return r'\left\{ \right\}', '{}'
 
+    def _handle_plot(self, code: str):
+        if not KAXE_AVAILABLE:
+            raise RuntimeError("Kaxe plotting library is not installed. Please run: pip install kaxe")
+
+        m = re.match(r'^plot\s*\((.*)\)$', code.strip(), re.DOTALL)
+        inner = m.group(1).strip() if m else code.strip()
+        args = self._split_top_level(inner, ',')
+        if not args or not args[0]:
+            raise ValueError("plot requires at least one function to plot, e.g. plot(sin(x)) or plot(f(x), x = -5..5)")
+
+        target_arg = args[0].strip()
+        rest_args = [a.strip() for a in args[1:]]
+
+        # 1. Parse targets: could be a list [f1, f2] or single expression
+        fn_exprs = []
+        if (target_arg.startswith('[') and target_arg.endswith(']')) or (target_arg.startswith('{') and target_arg.endswith('}')):
+            sub_items = self._split_top_level(target_arg[1:-1], ',')
+            fn_exprs.extend([self._parse_and_eval(it) for it in sub_items if it.strip()])
+        else:
+            fn_exprs.append(self._parse_and_eval(target_arg))
+
+        # Check if subsequent args are additional functions or range specs
+        processed_rest = []
+        for a in rest_args:
+            if '..' in a or '=' in a:
+                processed_rest.append(a)
+            else:
+                try:
+                    val = self._parse_and_eval(a)
+                    if isinstance(val, (sympy.Number, int, float)) or (hasattr(val, 'is_number') and val.is_number):
+                        processed_rest.append(a)
+                    else:
+                        fn_exprs.append(val)
+                except Exception:
+                    processed_rest.append(a)
+
+        # 2. Extract domain and range
+        x_domain = None
+        y_range = None
+        plot_var = None
+
+        num_args = []
+        for a in processed_rest:
+            range_match = re.match(r'^(?:([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*)?(.+?)\.\.(.+)$', a)
+            if range_match:
+                v_name = range_match.group(1)
+                min_v = float(N(self._parse_and_eval(range_match.group(2).strip())))
+                max_v = float(N(self._parse_and_eval(range_match.group(3).strip())))
+                if v_name and v_name.lower() in ('y', 'f'):
+                    y_range = (min_v, max_v)
+                else:
+                    if v_name:
+                        plot_var = Symbol(v_name)
+                    x_domain = (min_v, max_v)
+            else:
+                try:
+                    val = float(N(self._parse_and_eval(a)))
+                    num_args.append(val)
+                except Exception:
+                    pass
+
+        if not x_domain and len(num_args) >= 2:
+            x_domain = (num_args[0], num_args[1])
+            if len(num_args) >= 4:
+                y_range = (num_args[2], num_args[3])
+
+        # 3. Verify functions are single-variable
+        callables = []
+        labels = []
+        for item in fn_exprs:
+            if isinstance(item, Lambda):
+                expr = item.expr
+                sym = item.variables[0] if item.variables else Symbol('x')
+            elif isinstance(item, sympy.Basic) or callable(item):
+                expr = item
+                free = list(expr.free_symbols) if hasattr(expr, 'free_symbols') else []
+                if plot_var:
+                    sym = plot_var
+                elif free:
+                    sym = sorted(free, key=lambda s: s.name)[0]
+                else:
+                    sym = Symbol('x')
+
+                if hasattr(expr, 'free_symbols') and len(expr.free_symbols) > 1:
+                    if not (plot_var and plot_var in expr.free_symbols and len(expr.free_symbols) == 1):
+                        raise ValueError(f"Plotting only supports single-variable functions. Found multiple variables: {expr.free_symbols}")
+            else:
+                raise ValueError(f"Plotting is only supported for mathematical functions. Received: {item}")
+
+            if isinstance(expr, Matrix):
+                raise ValueError("Plotting is only supported for functions, not matrices.")
+
+            f_num = sympy.lambdify(sym, expr, modules=['numpy', 'math'])
+
+            def make_safe(f):
+                def wrapper(x_val):
+                    try:
+                        res = f(x_val)
+                        if hasattr(res, 'item'):
+                            res = res.item()
+                        if isinstance(res, (complex, np.complexfloating if NUMPY_AVAILABLE else complex)):
+                            return None
+                        if NUMPY_AVAILABLE and (np.iscomplex(res) or np.isnan(res) or np.isinf(res)):
+                            return None
+                        return float(res)
+                    except Exception:
+                        return None
+                return wrapper
+
+            callables.append(make_safe(f_num))
+            labels.append(latex(expr) if isinstance(expr, sympy.Basic) else str(expr))
+
+        # 4. Construct kaxe Plot
+        if x_domain and y_range:
+            plt = kaxe.Plot([x_domain[0], x_domain[1], y_range[0], y_range[1]])
+        else:
+            plt = kaxe.Plot()
+
+        plt.theme(kaxe.Themes.A4Small)
+
+        for i, (fn, lbl) in enumerate(zip(callables, labels)):
+            kwargs = {}
+            if x_domain and not (x_domain and y_range):
+                kwargs['domain'] = x_domain
+            f_obj = kaxe.Function2D(fn, **kwargs)
+            if len(callables) > 1:
+                f_obj.legend(f"${lbl}$")
+            plt.add(f_obj)
+
+        if len(callables) == 1:
+            plt.title(f"${labels[0]}$")
+
+        buf = io.BytesIO()
+        plt.save(buf, format='svg')
+        svg_content = buf.getvalue().decode('utf-8')
+
+        return {
+            'resultType': 'plot',
+            'resultLatex': f"\\text{{Plot: }} {', '.join(labels)}",
+            'resultText': f"PLOT({', '.join(labels)})",
+            'plotSvg': svg_content,
+        }
+
     def evaluate(self, raw_code: str):
         code = self.preprocess_code(raw_code)
 
@@ -432,6 +596,10 @@ class SymPyWorker:
                     'resultType': 'equation',
                     'assignedVariables': [assigned_var],
                 }
+
+        # Explicit plot(...)
+        if re.match(r'^plot\s*\(', code):
+            return self._handle_plot(code)
 
         # Explicit solve(...)
         if re.match(r'^solve\s*\(', code):
