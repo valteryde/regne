@@ -42,21 +42,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Ad-hoc sign so macOS doesn't show "app is damaged"
-      - name: Ad-hoc sign macOS app
-        if: matrix.os == 'macos-latest'
-        run: |
-          codesign --deep --force --sign - "dist/mac-arm64/Regne.app"
-          # Re-create the DMG from the signed .app
-          hdiutil create -volname "Regne" -srcfolder "dist/mac-arm64/Regne.app" -ov -format UDZO "dist/Regne-resigned.dmg"
-
       # Upload installer + update manifest to the GitHub Release
       - name: Upload macOS release assets
         if: matrix.os == 'macos-latest'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Regne-resigned.dmg
+            dist/*.dmg
+            dist/*.zip
             dist/latest-mac.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

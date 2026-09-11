@@ -1,5 +1,34 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+export interface UpdateProgress {
+  percent: number;
+  bytesPerSecond: number;
+  transferred: number;
+  total: number;
+}
+
+export interface UpdateInfo {
+  version: string;
+  releaseDate?: string;
+  releaseNotes?: string | any[] | null;
+}
+
+export type UpdaterStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+export interface UpdaterState {
+  status: UpdaterStatus;
+  info?: UpdateInfo | null;
+  progress?: UpdateProgress | null;
+  error?: string | null;
+}
+
 export interface RegneAPI {
   saveDocument: (
     data: string,
@@ -18,6 +47,7 @@ export interface RegneAPI {
   onMenuCommand: (callback: (command: string) => void) => () => void;
   onFileOpenRequest: (callback: (data: { filePath: string; content: string }) => void) => () => void;
   getPlatform: () => string;
+  getVersion: () => Promise<string>;
   casSympy: {
     getStatus: () => Promise<{ ready: boolean; error: string | null; version: string | null }>;
     evaluate: (id: string, code: string) => Promise<any>;
@@ -25,10 +55,14 @@ export interface RegneAPI {
     interrupt: () => void;
   };
   updater: {
+    getState: () => Promise<UpdaterState>;
+    checkForUpdates: () => Promise<void>;
+    downloadUpdate: () => Promise<void>;
+    installUpdate: () => Promise<void>;
+    onStatusChange: (callback: (state: UpdaterState) => void) => () => void;
+    onDownloadProgress: (callback: (progress: UpdateProgress) => void) => () => void;
     onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: any }) => void) => () => void;
     onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
-    installUpdate: () => Promise<void>;
-    checkForUpdates: () => Promise<void>;
   };
 }
 
@@ -71,6 +105,7 @@ const api: RegneAPI = {
   },
 
   getPlatform: () => process.platform,
+  getVersion: () => ipcRenderer.invoke('app:get-version'),
 
   casSympy: {
     getStatus: () => ipcRenderer.invoke('cas:sympy:status'),
@@ -80,6 +115,20 @@ const api: RegneAPI = {
   },
 
   updater: {
+    getState: () => ipcRenderer.invoke('updater:get-state'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+    installUpdate: () => ipcRenderer.invoke('updater:install-now'),
+    onStatusChange: (callback: (state: UpdaterState) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, state: UpdaterState) => callback(state);
+      ipcRenderer.on('updater:status-change', subscription);
+      return () => ipcRenderer.removeListener('updater:status-change', subscription);
+    },
+    onDownloadProgress: (callback: (progress: UpdateProgress) => void) => {
+      const subscription = (_event: Electron.IpcRendererEvent, progress: UpdateProgress) => callback(progress);
+      ipcRenderer.on('updater:download-progress', subscription);
+      return () => ipcRenderer.removeListener('updater:download-progress', subscription);
+    },
     onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: any }) => void) => {
       const subscription = (_event: Electron.IpcRendererEvent, info: { version: string; releaseNotes?: any }) => callback(info);
       ipcRenderer.on('updater:update-available', subscription);
@@ -90,8 +139,6 @@ const api: RegneAPI = {
       ipcRenderer.on('updater:update-downloaded', subscription);
       return () => ipcRenderer.removeListener('updater:update-downloaded', subscription);
     },
-    installUpdate: () => ipcRenderer.invoke('updater:install-now'),
-    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   },
 };
 

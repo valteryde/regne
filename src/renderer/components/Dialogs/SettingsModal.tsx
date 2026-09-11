@@ -7,7 +7,13 @@ import {
   Command,
   Ruler,
   Check,
+  RefreshCw,
+  Download,
+  CheckCircle,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
+import { UpdaterState } from '../../../preload';
 import { useEngine } from '../../context/EngineContext';
 import { useDocument } from '../../context/DocumentContext';
 import { RegneMascot } from '../Brand/RegneMascot';
@@ -38,6 +44,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     pageMargins,
     setPageMargins,
   } = useDocument();
+
+  const [appVersion, setAppVersion] = useState<string>('1.1.2');
+  const [updaterState, setUpdaterState] = useState<UpdaterState>({
+    status: 'idle',
+    info: null,
+    progress: null,
+    error: null,
+  });
+
+  useEffect(() => {
+    const api = window.regneAPI || window.hypatiaAPI;
+    if (api?.getVersion) {
+      api.getVersion().then((v) => v && setAppVersion(v)).catch(() => {});
+    }
+    if (!api?.updater) return;
+
+    api.updater.getState().then((state) => {
+      if (state) setUpdaterState(state);
+    }).catch(() => {});
+
+    const unsubStatus = api.updater.onStatusChange((s) => setUpdaterState(s));
+    const unsubProg = api.updater.onDownloadProgress((p) => {
+      setUpdaterState((prev) => ({ ...prev, status: 'downloading', progress: p }));
+    });
+
+    return () => {
+      unsubStatus?.();
+      unsubProg?.();
+    };
+  }, []);
+
+  const handleCheckForUpdates = () => {
+    const api = window.regneAPI || window.hypatiaAPI;
+    api?.updater.checkForUpdates().catch((err) => {
+      console.error('[SettingsModal] Check for updates error:', err);
+    });
+  };
+
+  const handleDownloadUpdate = () => {
+    const api = window.regneAPI || window.hypatiaAPI;
+    api?.updater.downloadUpdate().catch((err) => {
+      console.error('[SettingsModal] Download update error:', err);
+    });
+  };
+
+  const handleInstallUpdate = () => {
+    const api = window.regneAPI || window.hypatiaAPI;
+    api?.updater.installUpdate().catch((err) => {
+      console.error('[SettingsModal] Install update error:', err);
+    });
+  };
 
   // Escape key closes modal
   useEffect(() => {
@@ -391,9 +448,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Continuous WYSIWYG document workspace for symbolic mathematics and technical reports.
                     </p>
                     <div className="text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
-                      Version 1.0.0 (Python SymPy CAS • KaTeX • Electron)
+                      Version {appVersion} (Python SymPy CAS • KaTeX • Electron)
                     </div>
                   </div>
+                </div>
+
+                {/* Software Updates Section */}
+                <div className="p-3 rounded bg-[var(--bg-subtle)]/40 border border-[var(--border-color)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <RefreshCw className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin text-[#242e84]' : 'text-[var(--text-secondary)]'}`} />
+                      <h4 className="text-xs font-semibold text-[var(--text-primary)]">Software Updates</h4>
+                    </div>
+                    {updaterState.status !== 'downloading' && updaterState.status !== 'checking' && (
+                      <button
+                        onClick={handleCheckForUpdates}
+                        className="px-2.5 py-1 bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-primary)] rounded text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Check for Updates</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {updaterState.status === 'checking' && (
+                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] py-1">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#242e84]" />
+                      <span>Checking GitHub for updates...</span>
+                    </div>
+                  )}
+
+                  {updaterState.status === 'not-available' && (
+                    <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 py-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>You're running the latest version of Regne (v{appVersion}).</span>
+                    </div>
+                  )}
+
+                  {updaterState.status === 'available' && (
+                    <div className="flex items-center justify-between gap-2 py-1">
+                      <span className="text-xs text-[var(--text-primary)]">
+                        New version <span className="font-semibold">v{updaterState.info?.version}</span> is available.
+                      </span>
+                      <button
+                        onClick={handleDownloadUpdate}
+                        className="px-3 py-1 bg-[#242e84] hover:bg-[#1a2266] text-white rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {updaterState.status === 'downloading' && (
+                    <div className="space-y-1.5 py-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[var(--text-secondary)]">
+                          Downloading update ({Math.round(updaterState.progress?.percent ?? 0)}%)
+                        </span>
+                        <span className="font-mono text-[11px] text-[var(--text-muted)]">
+                          {((updaterState.progress?.transferred ?? 0) / (1024 * 1024)).toFixed(1)} / {((updaterState.progress?.total ?? 0) / (1024 * 1024)).toFixed(1)} MB
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[var(--bg-chrome)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#242e84] rounded-full transition-all duration-200"
+                          style={{ width: `${Math.min(updaterState.progress?.percent ?? 0, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {updaterState.status === 'downloaded' && (
+                    <div className="flex items-center justify-between gap-2 py-1">
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Update v{updaterState.info?.version} is ready to install.</span>
+                      </div>
+                      <button
+                        onClick={handleInstallUpdate}
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium transition-colors cursor-pointer"
+                      >
+                        Restart & Install
+                      </button>
+                    </div>
+                  )}
+
+                  {updaterState.status === 'error' && (
+                    <div className="flex items-center gap-2 text-xs text-rose-500 py-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{updaterState.error || 'Failed to check for updates'}</span>
+                    </div>
+                  )}
+
+                  {updaterState.status === 'idle' && (
+                    <div className="text-[11px] text-[var(--text-muted)] py-0.5">
+                      Current release: v{appVersion}. Click "Check for Updates" to verify latest releases.
+                    </div>
+                  )}
                 </div>
 
                 {/* Keyboard Shortcuts Reference */}

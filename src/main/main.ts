@@ -81,23 +81,7 @@ function createWindow() {
     },
   });
 
-  const checkForUpdates = async () => {
-    (autoUpdater as any).__manualCheck = true;
-    try {
-      await autoUpdater.checkForUpdates();
-    } catch (err: any) {
-      (autoUpdater as any).__manualCheck = false;
-      dialog.showMessageBox(mainWindow!, {
-        type: 'error',
-        title: 'Update Check Failed',
-        message: 'Could not check for updates.',
-        detail: err?.message ?? String(err),
-        buttons: ['OK'],
-      });
-    }
-  };
-
-  const menu = createApplicationMenu(mainWindow, isDev ? undefined : checkForUpdates);
+  const menu = createApplicationMenu(mainWindow, () => performUpdateCheck(true));
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(menu);
   } else {
@@ -556,7 +540,109 @@ ipcMain.on('cas:sympy:interrupt', () => {
   sympyManager.interrupt();
 });
 
-// --- Auto Updater ---
+// --- Auto Updater State & Controller ---
+type UpdaterStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+interface UpdateProgress {
+  percent: number;
+  bytesPerSecond: number;
+  transferred: number;
+  total: number;
+}
+
+interface UpdateInfo {
+  version: string;
+  releaseDate?: string;
+  releaseNotes?: string | any[] | null;
+}
+
+interface UpdaterState {
+  status: UpdaterStatus;
+  info?: UpdateInfo | null;
+  progress?: UpdateProgress | null;
+  error?: string | null;
+}
+
+let updaterState: UpdaterState = {
+  status: 'idle',
+  info: null,
+  progress: null,
+  error: null,
+};
+
+let isManualCheck = false;
+
+function broadcastUpdaterState(partial: Partial<UpdaterState>) {
+  updaterState = { ...updaterState, ...partial };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('updater:status-change', updaterState);
+  }
+}
+
+function handleUpdaterError(err: any) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setProgressBar(-1);
+  }
+  const errorMsg = err?.message ?? String(err);
+  console.error('[AutoUpdater] Error:', errorMsg);
+  broadcastUpdaterState({ status: 'error', error: errorMsg });
+
+  if (isManualCheck) {
+    isManualCheck = false;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Update Check Failed',
+        message: 'Could not complete update check or download.',
+        detail: errorMsg,
+        buttons: ['OK'],
+      });
+    }
+  }
+}
+
+function startDownloadUpdate() {
+  broadcastUpdaterState({
+    status: 'downloading',
+    progress: { percent: 0, bytesPerSecond: 0, transferred: 0, total: 0 },
+    error: null,
+  });
+  autoUpdater.downloadUpdate().catch((err: any) => {
+    handleUpdaterError(err);
+  });
+}
+
+async function performUpdateCheck(manual = true) {
+  if (isDev) {
+    if (manual && mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Check for Updates',
+        message: 'Update checks are disabled in development mode.',
+        detail: `Running development build (v${app.getVersion()}). Updates are checked automatically in packaged releases.`,
+        buttons: ['OK'],
+      });
+    }
+    return;
+  }
+
+  isManualCheck = manual;
+  broadcastUpdaterState({ status: 'checking', error: null });
+
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err: any) {
+    handleUpdaterError(err);
+  }
+}
+
 function setupAutoUpdater(): void {
   // Configure logging
   autoUpdater.logger = {
@@ -566,49 +652,94 @@ function setupAutoUpdater(): void {
     debug: (msg: any) => console.log('[AutoUpdater DEBUG]', msg),
   } as any;
 
-  autoUpdater.autoDownload = true;
+  // Do not auto-download blindly in background so users have full progress visibility & control
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for update...');
+    broadcastUpdaterState({ status: 'checking', error: null });
   });
 
   autoUpdater.on('update-available', (info) => {
     console.log('[AutoUpdater] Update available:', info.version);
-    mainWindow?.webContents.send('updater:update-available', {
+    const infoPayload: UpdateInfo = {
       version: info.version,
+      releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes,
-    });
+    };
+    broadcastUpdaterState({ status: 'available', info: infoPayload, error: null });
+    mainWindow?.webContents.send('updater:update-available', infoPayload);
+
+    if (isManualCheck) {
+      isManualCheck = false;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'Update Available',
+          message: `A new version of Regne is available (v${info.version}).`,
+          detail: typeof info.releaseNotes === 'string'
+            ? info.releaseNotes
+            : 'Would you like to download and install this update now?',
+          buttons: ['Download Update', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+        }).then(({ response }) => {
+          if (response === 0) {
+            startDownloadUpdate();
+          }
+        });
+      }
+    }
   });
 
   autoUpdater.on('update-not-available', (info) => {
     console.log('[AutoUpdater] No update available. Current version:', info.version);
-    // Only surface this when triggered by a manual check (flag set in IPC handler)
-    if ((autoUpdater as any).__manualCheck) {
-      (autoUpdater as any).__manualCheck = false;
-      if (mainWindow) {
+    broadcastUpdaterState({ status: 'not-available', info: { version: info.version }, error: null });
+    if (isManualCheck) {
+      isManualCheck = false;
+      if (mainWindow && !mainWindow.isDestroyed()) {
         dialog.showMessageBox(mainWindow, {
           type: 'info',
           title: 'No Updates Available',
-          message: `You are running the latest version of Regne (${info.version}).`,
+          message: `You are running the latest version of Regne (v${info.version}).`,
           buttons: ['OK'],
         });
       }
     }
   });
 
+  autoUpdater.on('download-progress', (progressObj) => {
+    const progress: UpdateProgress = {
+      percent: Math.round(progressObj.percent * 10) / 10,
+      bytesPerSecond: progressObj.bytesPerSecond || 0,
+      transferred: progressObj.transferred || 0,
+      total: progressObj.total || 0,
+    };
+    broadcastUpdaterState({ status: 'downloading', progress });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:download-progress', progress);
+      mainWindow.setProgressBar(Math.min(Math.max(progressObj.percent / 100, 0), 1));
+    }
+  });
+
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdater] Update downloaded:', info.version);
-    mainWindow?.webContents.send('updater:update-downloaded', {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setProgressBar(-1);
+    }
+    const infoPayload: UpdateInfo = {
       version: info.version,
-    });
-    // Also show a native dialog so the user always sees it
-    if (mainWindow) {
+    };
+    broadcastUpdaterState({ status: 'downloaded', info: infoPayload, error: null });
+    mainWindow?.webContents.send('updater:update-downloaded', infoPayload);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
       dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: 'Update Ready',
-        message: `Regne ${info.version} has been downloaded.`,
-        detail: 'Restart the application to apply the update.',
+        message: `Regne v${info.version} has been downloaded.`,
+        detail: 'Restart the application now to apply the update.',
         buttons: ['Restart Now', 'Later'],
         defaultId: 0,
         cancelId: 1,
@@ -621,32 +752,29 @@ function setupAutoUpdater(): void {
   });
 
   autoUpdater.on('error', (err) => {
-    console.error('[AutoUpdater] Error:', err?.message ?? err);
+    handleUpdaterError(err);
   });
 }
 
-// IPC: Trigger install of the downloaded update
+// IPC Handlers for Updater
+ipcMain.handle('updater:get-state', async () => {
+  return updaterState;
+});
+
+ipcMain.handle('updater:check', async () => {
+  await performUpdateCheck(true);
+});
+
+ipcMain.handle('updater:download', async () => {
+  startDownloadUpdate();
+});
+
 ipcMain.handle('updater:install-now', async () => {
   autoUpdater.quitAndInstall();
 });
 
-// IPC: Manual "Check for Updates…" from menu
-ipcMain.handle('updater:check', async () => {
-  (autoUpdater as any).__manualCheck = true;
-  try {
-    await autoUpdater.checkForUpdates();
-  } catch (err: any) {
-    (autoUpdater as any).__manualCheck = false;
-    if (mainWindow) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: 'Update Check Failed',
-        message: 'Could not check for updates.',
-        detail: err?.message ?? String(err),
-        buttons: ['OK'],
-      });
-    }
-  }
+ipcMain.handle('app:get-version', () => {
+  return app.getVersion();
 });
 
 app.whenReady().then(() => {
@@ -668,8 +796,8 @@ app.whenReady().then(() => {
   try {
     app.setAboutPanelOptions({
       applicationName: 'Regne',
-      applicationVersion: '1.0.0',
-      version: '1.0.0',
+      applicationVersion: app.getVersion(),
+      version: app.getVersion(),
       copyright: 'Copyright © Regne',
       credits: 'Mathematical CAS Document Workspace',
       ...(dockIcon ? { iconPath: dockIcon } : {}),
@@ -679,16 +807,14 @@ app.whenReady().then(() => {
   }
 
   sympyManager.start();
+  setupAutoUpdater();
   createWindow();
 
-  // Set up auto-updater in packaged builds only
+  // Set up auto-updater background check in packaged builds only
   if (!isDev) {
-    setupAutoUpdater();
     // Delay the first check slightly so the window has time to fully render
     setTimeout(() => {
-      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-        console.warn('[AutoUpdater] Initial check failed:', err?.message ?? err);
-      });
+      performUpdateCheck(false);
     }, 5000);
   }
 

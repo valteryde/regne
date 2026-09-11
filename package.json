@@ -1,7 +1,7 @@
 {
   "name": "regne",
   "productName": "Regne",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Regne - Mathematical CAS Document Workspace",
   "main": "dist/main/main.js",
   "scripts": {
@@ -65,13 +65,18 @@
       }
     ],
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "resources/icon.icns",
-      "identity": null
+      "identity": "-",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis",
-      "icon": "resources/icon.icns"
+      "icon": "resources/icon.icns",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   }
 }

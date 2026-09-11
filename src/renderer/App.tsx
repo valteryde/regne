@@ -8,6 +8,7 @@ import { MathDocument } from './components/Document/MathDocument';
 import { DocumentRuler } from './components/Ruler/DocumentRuler';
 import { ExportModal } from './components/Dialogs/ExportModal';
 import { SettingsModal } from './components/Dialogs/SettingsModal';
+import { UpdateNotification } from './components/Updater/UpdateNotification';
 
 const MainLayout: React.FC = () => {
   const { isRulerVisible, rulerPosition } = useDocument();
@@ -147,6 +148,9 @@ const MainLayout: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
+
+      {/* Auto-Updater Notification & Progress Bar */}
+      <UpdateNotification />
     </div>
   );
 };
