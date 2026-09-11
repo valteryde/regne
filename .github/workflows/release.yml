@@ -42,6 +42,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Ad-hoc sign the macOS app (avoids "damaged" Gatekeeper error)
+        if: matrix.os == 'macos-latest'
+        run: codesign --deep --force --sign - dist/mac-arm64/Regne.app
+
       - name: Upload macOS installer
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
