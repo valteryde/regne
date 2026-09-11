@@ -611,6 +611,8 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         resultPlotSvg: result.plotSvg,
         resultType: result.resultType,
         error: result.error,
+        errorCol: result.errorCol,
+        errorSource: result.errorSource,
       });
     } catch (err: any) {
       updateElement(id, {
@@ -640,6 +642,8 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       resultPlotSvg: undefined,
       resultType: undefined,
       error: undefined,
+      errorCol: undefined,
+      errorSource: undefined,
     });
   }, [updateElement]);
 

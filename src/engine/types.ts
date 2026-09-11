@@ -41,6 +41,8 @@ export interface CasEvaluationResult {
   assignedVariables?: CasVariable[];
   executionTimeMs: number;
   error?: string;
+  errorCol?: number;
+  errorSource?: string;
 }
 
 export interface CasEngineCapabilities {

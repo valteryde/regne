@@ -193,6 +193,8 @@ interface MathLineProps {
   resultPlotSvg?: string;
   resultType?: string;
   error?: string;
+  errorCol?: number;
+  errorSource?: string;
   isEvaluating?: boolean;
   color?: string;
   backgroundColor?: string;
@@ -219,6 +221,8 @@ const MathLine: React.FC<MathLineProps> = memo(({
   resultPlotSvg,
   resultType,
   error,
+  errorCol,
+  errorSource,
   isEvaluating,
   color,
   backgroundColor,
@@ -317,20 +321,34 @@ const MathLine: React.FC<MathLineProps> = memo(({
       ) : error ? (
         <div
           ref={resultAreaRef}
-          className={`group/result relative flex items-start gap-1 py-0.5 pl-6 select-text cursor-pointer rounded-sm transition-colors ${
+          className={`group/result relative flex flex-col gap-0.5 py-0.5 pl-6 select-text cursor-pointer rounded-sm transition-colors ${
             resultSelected ? 'bg-blue-100 ring-1 ring-blue-300' : ''
           }`}
           onClick={(e) => { e.stopPropagation(); setResultSelected(!resultSelected); }}
         >
-          <span className="text-red-600 text-xs font-mono">{error}</span>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onUnevaluate(); }}
-            className="ml-auto opacity-0 group-hover/result:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 cursor-pointer"
-            title="Clear result"
-          >
-            <X className="w-3 h-3" />
-          </button>
+          {/* Error message row */}
+          <div className="flex items-start gap-1">
+            <span className="text-red-600 text-xs font-mono leading-snug">
+              ✕ {error}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onUnevaluate(); }}
+              className="ml-auto opacity-0 group-hover/result:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 cursor-pointer"
+              title="Clear result"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          {/* Source snippet with caret highlight */}
+          {errorSource != null && errorCol != null && (
+            <div className="font-mono text-xs leading-snug overflow-x-auto">
+              <div className="text-[var(--text-muted)] whitespace-pre">{errorSource}</div>
+              <div className="text-red-500 whitespace-pre select-none" aria-hidden>
+                {' '.repeat(Math.max(0, errorCol))}^
+              </div>
+            </div>
+          )}
         </div>
       ) : evaluated && (resultPlotSvg || resultType === 'plot') ? (
         <div
@@ -587,7 +605,31 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
   }, [doc.elements, ensureFocusById]);
 
   // React to document element changes: fulfill pending focus & auto-focus converted lines
+  const prevElementCountRef = useRef<number>(doc.elements.length);
+  const prevElementIdsRef = useRef<string[]>(doc.elements.map((e) => e.id));
   useEffect(() => {
+    const prevCount = prevElementCountRef.current;
+    const prevIds = prevElementIdsRef.current;
+    const currCount = doc.elements.length;
+    prevElementCountRef.current = currCount;
+    prevElementIdsRef.current = doc.elements.map((e) => e.id);
+
+    // An element was deleted — auto-focus the nearest surviving element so the user
+    // doesn't have to click/mouse to regain focus after deletion.
+    // Skip if pendingFocusIdRef is already set (e.g. onBackspaceEmpty already requested focus).
+    if (currCount < prevCount && !pendingFocusIdRef.current) {
+      // Find which element was removed and focus the element that now occupies its slot
+      const currentIds = new Set(doc.elements.map((e) => e.id));
+      const deletedIdx = prevIds.findIndex((id) => !currentIds.has(id));
+      if (deletedIdx !== -1 && doc.elements.length > 0) {
+        const targetIdx = Math.max(0, Math.min(deletedIdx, doc.elements.length - 1));
+        const targetId = doc.elements[targetIdx]?.id;
+        if (targetId) {
+          ensureFocusById(targetId, true);
+        }
+      }
+    }
+
     if (pendingFocusIdRef.current) {
       const { id, atEnd } = pendingFocusIdRef.current;
       ensureFocusById(id, atEnd);
@@ -1129,6 +1171,8 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
                 resultPlotSvg={el.resultPlotSvg}
                 resultType={el.resultType}
                 error={el.error}
+                errorCol={el.errorCol}
+                errorSource={el.errorSource}
                 isEvaluating={el.isEvaluating}
                 color={el.color}
                 backgroundColor={el.backgroundColor}

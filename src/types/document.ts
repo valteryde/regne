@@ -31,6 +31,8 @@ export interface MathElement {
   resultPlotSvg?: string;
   resultType?: string;
   error?: string;
+  errorCol?: number;    // 0-based column offset within errorSource where the problem was detected
+  errorSource?: string; // the preprocessed expression string that caused the error
   color?: string;
   backgroundColor?: string;
 }

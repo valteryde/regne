@@ -100,6 +100,8 @@ export class PythonSymPyBridge implements ICasEngine {
             resultType: 'error',
             executionTimeMs: result.executionTimeMs || (performance.now() - startTime),
             error: result.error,
+            errorCol: result.errorCol,
+            errorSource: result.errorSource,
           };
         }
 

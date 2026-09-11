@@ -868,6 +868,24 @@ def main():
                     "executionTimeMs": duration_ms,
                 })
                 print(json.dumps(eval_res), flush=True)
+            except SyntaxError as err:
+                duration_ms = (time.perf_counter() - start) * 1000.0
+                # SyntaxError.msg is the human-readable message; SyntaxError.offset is the 1-based column
+                clean_msg = err.msg if hasattr(err, 'msg') and err.msg else str(err)
+                error_col = (err.offset - 1) if (hasattr(err, 'offset') and err.offset is not None) else None
+                error_source = err.text.rstrip('\n') if (hasattr(err, 'text') and err.text) else None
+                result_payload = {
+                    "id": req_id,
+                    "success": False,
+                    "resultType": "error",
+                    "error": clean_msg,
+                    "executionTimeMs": duration_ms,
+                }
+                if error_col is not None:
+                    result_payload["errorCol"] = error_col
+                if error_source is not None:
+                    result_payload["errorSource"] = error_source
+                print(json.dumps(result_payload), flush=True)
             except Exception as err:
                 duration_ms = (time.perf_counter() - start) * 1000.0
                 print(json.dumps({
