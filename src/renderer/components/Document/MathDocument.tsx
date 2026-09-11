@@ -305,11 +305,11 @@ const MathLine: React.FC<MathLineProps> = memo(({
           </div>
         </div>
       ) : evaluated && resultLatex ? (
-        <div className="pt-0.5 pb-0.5 pl-6 select-text" style={color ? { color } : undefined}>
+        <div className="pt-0.5 pb-0.5 pl-6 select-text overflow-x-auto" style={color ? { color } : undefined}>
           <KaTeXRenderer
             math={resultLatex}
             displayMode={false}
-            className="select-text inline-block"
+            className="select-text"
           />
         </div>
       ) : null}
