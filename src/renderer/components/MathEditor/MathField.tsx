@@ -68,7 +68,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         if (mf) {
           mf.executeCommand(['insert', snippet]);
           try {
-            mf.focus({ preventScroll: true });
+            (mf as any).focus({ preventScroll: true });
           } catch {
             mf.focus();
           }
@@ -78,7 +78,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         const mf = mfRef.current;
         if (mf) {
           try {
-            mf.focus({ preventScroll: true });
+            (mf as any).focus({ preventScroll: true });
           } catch {
             mf.focus();
           }
@@ -107,27 +107,10 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
 
       // Override MathLive's default onScrollIntoView hook.
       // By default, MathLive calls this.host.scrollIntoView({ block: 'nearest' })
-      // on EVERY keystroke, which violently jerks the parent document scroll container
-      // up and down. We replace this with a container-aware check that ONLY scrolls if
-      // the field is actually outside the visible viewport.
+      // on EVERY single keystroke. Intercepting it and making it a no-op ensures that
+      // the document scroll position NEVER jumps or shifts while the user is typing math.
       (mf as any).onScrollIntoView = () => {
-        const host = mfRef.current;
-        if (!host) return;
-
-        const container = host.closest('.overflow-y-auto') as HTMLElement | null;
-        if (!container) return;
-
-        const hostRect = host.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        const PADDING = 24;
-
-        if (hostRect.bottom > containerRect.bottom - PADDING) {
-          const diff = hostRect.bottom - (containerRect.bottom - PADDING);
-          container.scrollBy({ top: diff, behavior: 'auto' });
-        } else if (hostRect.top < containerRect.top + PADDING) {
-          const diff = hostRect.top - (containerRect.top + PADDING);
-          container.scrollBy({ top: diff, behavior: 'auto' });
-        }
+        // Absolutely no-op: never scroll the document container when writing math
       };
 
       // Make CAS function names render upright (not italic/cursive)
@@ -196,6 +179,16 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
             .ML__smart-fence__close {
               opacity: 0.6 !important;
               color: inherit !important;
+            }
+            /* Prevent keyboard-sink from escaping the mathfield or causing viewport scroll jumps */
+            .ML__keyboard-sink {
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              width: 1px !important;
+              height: 1px !important;
+              opacity: 0.001 !important;
+              pointer-events: none !important;
             }
           `;
           mf.shadowRoot.appendChild(style);
@@ -283,6 +276,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
           fontSize,
           color: color || (readOnly ? 'var(--math-output-color)' : 'var(--math-input-color)'),
           display: 'block',
+          position: 'relative',
           outline: 'none',
           border: 'none',
           background: 'transparent',

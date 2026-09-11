@@ -35,7 +35,7 @@ try:
         diff, integrate, solve, factor, expand, simplify,
         sin, cos, tan, sec, csc, cot, asin, acos, atan,
         sinh, cosh, tanh, exp, log, ln, sqrt, pi, E, I, oo,
-        latex, Eq, Matrix, limit, series, N, Lambda
+        latex, Eq, Matrix, limit, series, N, Lambda, Abs
     )
     from sympy.parsing.sympy_parser import (
         parse_expr,
@@ -97,10 +97,13 @@ class SymPyWorker:
             'Eq': Eq,
             'N': N,
             'Lambda': Lambda,
+            'Abs': Abs,
+            'abs': Abs,
+            'Symbol': lambda name, **kw: Symbol(name, **{**kw, 'real': True}),
         }
-        # Pre-seed standard algebraic symbols
+        # Pre-seed standard algebraic symbols with real assumption
         for char in 'abcdefghijklmnopqrstuvwxyzxyzXYZ':
-            self.scope[char] = Symbol(char)
+            self.scope[char] = Symbol(char, real=True)
 
     def get_user_scope(self):
         builtins = {
@@ -132,6 +135,120 @@ class SymPyWorker:
                 }
         return user_vars
 
+    @staticmethod
+    def _extract_balanced_braces(s: str, start_idx: int):
+        if start_idx >= len(s) or s[start_idx] != '{':
+            return None
+        depth = 0
+        content = []
+        for i in range(start_idx, len(s)):
+            c = s[i]
+            if c == '{':
+                depth += 1
+                if depth > 1:
+                    content.append(c)
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return ''.join(content), i + 1
+                else:
+                    content.append(c)
+            else:
+                content.append(c)
+        return None
+
+    def _replace_fractions(self, s: str) -> str:
+        while r'\frac' in s:
+            idx = s.find(r'\frac')
+            if idx == -1:
+                break
+            if s[idx:].startswith(r'\frac{d}{d'):
+                break
+            p1 = s.find('{', idx + 5)
+            if p1 == -1:
+                break
+            num_res = self._extract_balanced_braces(s, p1)
+            if not num_res:
+                break
+            num_str, next_idx = num_res
+            while next_idx < len(s) and s[next_idx].isspace():
+                next_idx += 1
+            if next_idx >= len(s) or s[next_idx] != '{':
+                break
+            den_res = self._extract_balanced_braces(s, next_idx)
+            if not den_res:
+                break
+            den_str, end_idx = den_res
+            num_str = self._replace_fractions(num_str)
+            den_str = self._replace_fractions(den_str)
+            s = s[:idx] + f'(({num_str})/({den_str}))' + s[end_idx:]
+        return s
+
+    def _replace_sqrts(self, s: str) -> str:
+        while r'\sqrt' in s:
+            idx = s.find(r'\sqrt')
+            if idx == -1:
+                break
+            p1 = s.find('{', idx + 5)
+            if p1 == -1:
+                break
+            inner_res = self._extract_balanced_braces(s, p1)
+            if not inner_res:
+                break
+            inner_str, end_idx = inner_res
+            inner_str = self._replace_sqrts(inner_str)
+            s = s[:idx] + f'sqrt({inner_str})' + s[end_idx:]
+        return s
+
+    @staticmethod
+    def _parse_abs_bars(s: str) -> str:
+        s = re.sub(r'\\left\s*\\lvert', '|', s)
+        s = re.sub(r'\\right\s*\\rvert', '|', s)
+        s = re.sub(r'\\(?:lvert|rvert)', '|', s)
+        s = re.sub(r'\\left\s*\|', '|', s)
+        s = re.sub(r'\\right\s*\|', '|', s)
+
+        result = []
+        stack = []
+        i = 0
+        while i < len(s):
+            if s[i] == '|':
+                j = i - 1
+                while j >= 0 and s[j].isspace():
+                    j -= 1
+                prev_char = s[j] if j >= 0 else None
+
+                k = i + 1
+                while k < len(s) and s[k].isspace():
+                    k += 1
+                next_char = s[k] if k < len(s) else None
+
+                is_open = False
+                is_close = False
+
+                if prev_char is None or prev_char in '=+-*/^(,{[':
+                    is_open = True
+                elif next_char is None or next_char in '=+-*/^),}]':
+                    is_close = True
+                elif stack:
+                    is_close = True
+                else:
+                    is_open = True
+
+                if is_open and not (stack and is_close):
+                    result.append('Abs(')
+                    stack.append(len(result) - 1)
+                elif is_close and stack:
+                    result.append(')')
+                    stack.pop()
+                else:
+                    result.append('|')
+                i += 1
+            else:
+                result.append(s[i])
+                i += 1
+        return ''.join(result)
+
     def preprocess_code(self, s: str) -> str:
         s = s.strip()
         if s.endswith(';'):
@@ -154,6 +271,9 @@ class SymPyWorker:
         s = s.replace(r'\,', ' ').replace(r'\;', ' ').replace(r'\:', ' ').replace(r'\ ', ' ')
         s = re.sub(r'\\(?:quad|qquad)\b', ' ', s)
         s = s.replace(r'\cdot', '*').replace(r'\times', '*')
+
+        # Convert absolute value / magnitude delimiters before fractions/powers
+        s = self._parse_abs_bars(s)
 
         # Function arrows for mappings (e.g. x -> expr, x \to expr, x \mapsto expr)
         s = s.replace(r'\to', '->').replace(r'\rightarrow', '->').replace(r'\mapsto', '->')
@@ -214,12 +334,11 @@ class SymPyWorker:
         # Integrals: \int expr dx
         s = re.sub(r'\\int\s*(.*?)\s*d([a-zA-Z_][a-zA-Z0-9_]*)', r'integrate(\1, \2)', s)
 
-        # Fractions: \frac{a}{b} -> ((a)/(b))
-        while r'\frac' in s:
-            s = re.sub(r'\\frac\{([^{}]+)\}\{([^{}]+)\}', r'((\1)/(\2))', s)
+        # Fractions: \frac{a}{b} -> ((a)/(b)) using balanced braces
+        s = self._replace_fractions(s)
 
-        # Sqrt: \sqrt{a} -> sqrt(a)
-        s = re.sub(r'\\sqrt\{([^{}]+)\}', r'sqrt(\1)', s)
+        # Sqrt: \sqrt{a} -> sqrt(a) using balanced braces
+        s = self._replace_sqrts(s)
 
         # Common LaTeX math functions
         for fn in ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'sinh', 'cosh', 'tanh', 'exp', 'ln', 'log', 'diff', 'integrate', 'solve', 'factor', 'expand', 'simplify']:
@@ -227,6 +346,9 @@ class SymPyWorker:
 
         for greek in ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'theta', 'lambda', 'mu', 'pi', 'rho', 'sigma', 'phi', 'omega']:
             s = s.replace('\\' + greek, greek)
+
+        # Normalize subscript braces: C_{Ay} -> C_Ay, x_{A0} -> x_A0, \phi_{2} -> phi_2
+        s = re.sub(r'_\{([a-zA-Z0-9_]+)\}', r'_\1', s)
 
         # Exponent braces: ^{...} -> ^(...)
         s = re.sub(r'\^\{([^{}]+)\}', r'^(\1)', s)
@@ -345,7 +467,12 @@ class SymPyWorker:
             try:
                 val = solve(eq_target, dict=True)
             except Exception:
-                val = solve(eq_target)
+                try:
+                    val = solve(eq_target)
+                except Exception:
+                    if isinstance(eq_target, Eq):
+                        return latex(eq_target), str(eq_target)
+                    return r'\left\{ \right\}', '{}'
             return self._format_solve_result(val, free_syms)
 
         return r'\left\{ \right\}', '{}'

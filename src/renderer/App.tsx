@@ -4,7 +4,7 @@ import { DocumentProvider, useDocument } from './context/DocumentContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { Toolbar } from './components/Toolbar/Toolbar';
 import { SidebarDrawer, SidebarTab } from './components/Sidebar/SidebarDrawer';
-import { MapleDocument } from './components/Document/MapleDocument';
+import { MathDocument } from './components/Document/MathDocument';
 import { DocumentRuler } from './components/Ruler/DocumentRuler';
 import { ExportModal } from './components/Dialogs/ExportModal';
 import { SettingsModal } from './components/Dialogs/SettingsModal';
@@ -128,7 +128,7 @@ const MainLayout: React.FC = () => {
             <DocumentRuler scrollRef={documentScrollRef} />
           )}
 
-          <MapleDocument containerRef={documentScrollRef} />
+          <MathDocument containerRef={documentScrollRef} />
 
           {isRulerVisible && rulerPosition === 'bottom' && (
             <DocumentRuler scrollRef={documentScrollRef} />

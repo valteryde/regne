@@ -311,20 +311,92 @@ class SympyProcessManager {
   public start(): void {
     if (this.process) return;
 
-    const workerScript = path.resolve(__dirname, '../../src/engine/sympyWorker.py');
-    const venvPythonPosix = path.resolve(process.cwd(), '.venv/bin/python3');
-    const venvPythonWin = path.resolve(process.cwd(), '.venv/Scripts/python.exe');
+    let workerScript = path.resolve(__dirname, '../../src/engine/sympyWorker.py');
+    if (app && app.isPackaged) {
+      const packagedPaths = [
+        path.join(process.resourcesPath, 'engine/sympyWorker.py'),
+        path.join(process.resourcesPath, 'sympyWorker.py'),
+        path.join(process.resourcesPath, 'app.asar.unpacked/src/engine/sympyWorker.py'),
+        path.join(process.resourcesPath, 'app.asar.unpacked/dist/engine/sympyWorker.py'),
+      ];
+      for (const p of packagedPaths) {
+        if (fsSync.existsSync(p)) {
+          workerScript = p;
+          break;
+        }
+      }
+    } else {
+      const devPaths = [
+        path.resolve(__dirname, '../../src/engine/sympyWorker.py'),
+        path.resolve(__dirname, '../engine/sympyWorker.py'),
+        path.join(process.cwd(), 'src/engine/sympyWorker.py'),
+        path.join(process.cwd(), 'dist/engine/sympyWorker.py'),
+      ];
+      for (const p of devPaths) {
+        if (fsSync.existsSync(p)) {
+          workerScript = p;
+          break;
+        }
+      }
+    }
+
+    if (!fsSync.existsSync(workerScript)) {
+      this.isReady = false;
+      this.statusError = `SymPy worker script not found at: ${workerScript}`;
+      console.error('[SymPy Manager]', this.statusError);
+      return;
+    }
+
+    const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
     let pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
 
-    if (fsSync.existsSync(venvPythonPosix)) {
-      pythonCmd = venvPythonPosix;
-    } else if (fsSync.existsSync(venvPythonWin)) {
-      pythonCmd = venvPythonWin;
+    const candidatePythonPaths: string[] = [];
+    if (process.platform === 'win32') {
+      candidatePythonPaths.push(
+        path.resolve(process.cwd(), '.venv/Scripts/python.exe'),
+        path.join(homeDir, '.venv/Scripts/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python313/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python312/python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python311/python.exe')
+      );
+    } else {
+      candidatePythonPaths.push(
+        path.resolve(process.cwd(), '.venv/bin/python3'),
+        path.join(homeDir, '.venv/bin/python3'),
+        '/opt/homebrew/bin/python3',
+        '/usr/local/bin/python3',
+        path.join(homeDir, '.pyenv/shims/python3')
+      );
     }
+
+    for (const candidate of candidatePythonPaths) {
+      if (fsSync.existsSync(candidate)) {
+        pythonCmd = candidate;
+        break;
+      }
+    }
+
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (process.platform === 'darwin') {
+      const extraPaths = [
+        '/opt/homebrew/bin',
+        '/opt/homebrew/sbin',
+        '/usr/local/bin',
+        path.join(homeDir, '.local/bin'),
+        path.join(homeDir, '.pyenv/shims'),
+      ];
+      const validExtras = extraPaths.filter((p) => fsSync.existsSync(p));
+      if (validExtras.length > 0) {
+        env.PATH = validExtras.join(':') + (env.PATH ? `:${env.PATH}` : '');
+      }
+    }
+
+    let lastStderr = '';
 
     try {
       this.process = spawn(pythonCmd, ['-u', workerScript], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       });
 
       this.rl = readline.createInterface({
@@ -352,7 +424,9 @@ class SympyProcessManager {
       });
 
       this.process.stderr?.on('data', (data) => {
-        console.warn(`[SymPy Stderr] ${data}`);
+        const msg = data.toString();
+        lastStderr = (lastStderr + msg).slice(-2000);
+        console.warn(`[SymPy Stderr] ${msg}`);
       });
 
       this.process.on('close', (code) => {
@@ -360,8 +434,11 @@ class SympyProcessManager {
         this.isReady = false;
         this.rl?.close();
         this.rl = null;
+        const detail = lastStderr.trim() ? `: ${lastStderr.trim()}` : '';
+        const errMsg = `SymPy worker exited with code ${code}${detail}`;
+        this.statusError = errMsg;
         for (const [id, req] of this.pendingRequests.entries()) {
-          req.reject(new Error(`SymPy worker exited with code ${code}`));
+          req.reject(new Error(errMsg));
         }
         this.pendingRequests.clear();
       });

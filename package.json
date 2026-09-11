@@ -1,14 +1,14 @@
 {
   "name": "regne",
   "productName": "Regne",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Regne - Mathematical CAS Document Workspace",
   "main": "dist/main/main.js",
   "scripts": {
     "brand": "node scripts/brand-electron.cjs",
     "postinstall": "node scripts/brand-electron.cjs",
     "build:renderer": "vite build",
-    "build:main": "tsc -p tsconfig.node.json",
+    "build:main": "tsc -p tsconfig.node.json && node scripts/copy-worker.cjs",
     "build": "node scripts/brand-electron.cjs && npm run build:renderer && npm run build:main",
     "test": "npm run build:main && node test/runEngineTest.cjs",
     "start": "node scripts/brand-electron.cjs && npm run build && electron .",
@@ -57,6 +57,12 @@
     ],
     "files": [
       "dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/engine/sympyWorker.py",
+        "to": "engine/sympyWorker.py"
+      }
     ],
     "mac": {
       "target": "dmg",

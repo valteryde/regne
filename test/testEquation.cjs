@@ -29,7 +29,10 @@ async function main() {
     '\\sin\\left(\\phi_2\\right) = \\frac{C_{Ay}}{|C_A|}',
     '\\sin(\\phi_2)',
     '|C_A|',
-    '\\frac{C_{Ay}}{|C_A|}'
+    '\\frac{C_{Ay}}{|C_A|}',
+    '|H_A|^2 = (x_A + x_{A0})^2 + |C_A|^2 - 2 \\cdot (x_A + x_{A0}) \\cdot |C_A| \\cdot \\cos(\\phi_1)',
+    '\\frac{\\frac{a}{b}}{c}',
+    '|x| + |y|'
   ];
 
   for (const code of testCodes) {

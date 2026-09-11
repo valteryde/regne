@@ -6,7 +6,10 @@ export type SectionKind =
   | 'subsubsection'
   | 'theorem'
   | 'lemma'
+  | 'corollary'
   | 'definition'
+  | 'proof'
+  | 'example'
   | 'remark';
 
 export interface TextElement {

@@ -73,7 +73,7 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
     <div
       data-element-id={id}
       data-element-idx={index}
-      className={`group/sec relative py-1 px-1 transition-colors select-text ${
+      className={`group/sec relative py-0.5 px-1 transition-colors select-text ${
         isSelected ? 'bg-[var(--selection-bg)] maple-selected' : 'bg-transparent'
       }`}
       onMouseDown={onRowMouseDown}

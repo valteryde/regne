@@ -84,6 +84,23 @@ async function testSympyWorker() {
   console.assert(latexRes.resultLatex.includes('4'), 'LaTeX result unexpected');
   console.log('✓ \\frac{d}{dx}(x^4) ->', latexRes.resultLatex);
 
+  // Test 4b: Complex fractions with subscripts & magnitude bars
+  const eq1Res = await send({ id: 'eq1', action: 'eval', code: '\\sin(\\phi_2) = \\frac{C_{Ay}}{|C_A|}' });
+  console.assert(eq1Res.success, 'eq1 evaluation failed: ' + eq1Res.error);
+  console.log('✓ \\sin(\\phi_2) = \\frac{C_{Ay}}{|C_A|} ->', eq1Res.resultLatex);
+
+  const eq2Res = await send({
+    id: 'eq2',
+    action: 'eval',
+    code: '|H_A|^2 = (x_A + x_{A0})^2 + |C_A|^2 - 2 \\cdot (x_A + x_{A0}) \\cdot |C_A| \\cdot \\cos(\\phi_1)'
+  });
+  console.assert(eq2Res.success, 'eq2 evaluation failed: ' + eq2Res.error);
+  console.log('✓ |H_A|^2 = (x_A + x_{A0})^2 + |C_A|^2 - ... ->', eq2Res.resultLatex.slice(0, 80) + '...');
+
+  const nestedFracRes = await send({ id: 'fracNested', action: 'eval', code: '\\frac{\\frac{a}{b}}{c}' });
+  console.assert(nestedFracRes.success && nestedFracRes.resultText.includes('a/(b*c)'), 'nested frac failed');
+  console.log('✓ \\frac{\\frac{a}{b}}{c} ->', nestedFracRes.resultText);
+
   // Test 5: Variable Assignment & Scope
   const assignRes = await send({ id: 'assign1', action: 'eval', code: 'radius := 12' });
   console.assert(assignRes.success && assignRes.resultType === 'equation', 'Assign failed');

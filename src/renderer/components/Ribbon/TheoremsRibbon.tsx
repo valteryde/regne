@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDocument } from '../../context/DocumentContext';
-import { SectionKind } from '../../types/document';
+import { SectionKind } from '../../../types/document';
 import { BookOpen, Award, CheckCircle2, FileQuestion } from 'lucide-react';
 
 export const TheoremsRibbon: React.FC = () => {
