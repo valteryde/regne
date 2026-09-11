@@ -101,6 +101,23 @@ async function testSympyWorker() {
   console.assert(nestedFracRes.success && nestedFracRes.resultText.includes('a/(b*c)'), 'nested frac failed');
   console.log('✓ \\frac{\\frac{a}{b}}{c} ->', nestedFracRes.resultText);
 
+  // Test 4c: Unbraced fractions (e.g. \frac12) and kinetic energy equation
+  const frac12Res = await send({ id: 'frac12', action: 'eval', code: '\\frac12 + \\frac13' });
+  console.assert(frac12Res.success && frac12Res.resultLatex.includes('5') && !frac12Res.resultLatex.includes('frac_'), 'Unbraced \\frac12 failed: ' + frac12Res.resultLatex);
+  console.log('✓ \\frac12 + \\frac13 ->', frac12Res.resultLatex);
+
+  const dfracRes = await send({ id: 'dfrac1', action: 'eval', code: '\\dfrac{1}{2} + \\tfrac{1}{3}' });
+  console.assert(dfracRes.success && dfracRes.resultLatex.includes('5'), '\\dfrac / \\tfrac failed');
+  console.log('✓ \\dfrac{1}{2} + \\tfrac{1}{3} ->', dfracRes.resultLatex);
+
+  const ekRes = await send({
+    id: 'ek1',
+    action: 'eval',
+    code: 'E_k := \\frac12 (\\omega_2^2 \\cdot J_A + \\omega_2^2 \\cdot J_B + \\omega_2^2 \\cdot J_C)',
+  });
+  console.assert(ekRes.success && !ekRes.resultLatex.includes('frac_'), 'Kinetic energy frac parsing failed: ' + ekRes.resultLatex);
+  console.log('✓ E_k := \\frac12 (...) ->', ekRes.resultLatex);
+
   // Test 5: Variable Assignment & Scope
   const assignRes = await send({ id: 'assign1', action: 'eval', code: 'radius := 12' });
   console.assert(assignRes.success && assignRes.resultType === 'equation', 'Assign failed');

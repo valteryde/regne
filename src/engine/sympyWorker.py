@@ -157,47 +157,83 @@ class SymPyWorker:
                 content.append(c)
         return None
 
+    @staticmethod
+    def _extract_latex_arg(s: str, start_idx: int):
+        """Extracts a LaTeX argument starting at start_idx, skipping leading whitespace.
+        Supports:
+        - Balanced braces: '{...}'
+        - LaTeX command macro: '\\pi', '\\alpha', etc.
+        - Single token / character: '1', 'x', etc.
+        Returns (content_str, next_idx) or None.
+        """
+        while start_idx < len(s) and s[start_idx].isspace():
+            start_idx += 1
+        if start_idx >= len(s):
+            return None
+        if s[start_idx] == '{':
+            return SymPyWorker._extract_balanced_braces(s, start_idx)
+        if s[start_idx] == '\\':
+            m = re.match(r'^\\[a-zA-Z]+', s[start_idx:])
+            if m:
+                return m.group(0), start_idx + len(m.group(0))
+            if start_idx + 1 < len(s):
+                return s[start_idx:start_idx + 2], start_idx + 2
+            return s[start_idx], start_idx + 1
+        return s[start_idx], start_idx + 1
+
     def _replace_fractions(self, s: str) -> str:
-        while r'\frac' in s:
-            idx = s.find(r'\frac')
-            if idx == -1:
+        pattern = re.compile(r'\\(?:d|t|c)?frac(?![a-zA-Z])')
+        pos = 0
+        while True:
+            m = pattern.search(s, pos)
+            if not m:
                 break
-            if s[idx:].startswith(r'\frac{d}{d'):
-                break
-            p1 = s.find('{', idx + 5)
-            if p1 == -1:
-                break
-            num_res = self._extract_balanced_braces(s, p1)
+            idx = m.start()
+            after_cmd = m.end()
+
+            # Skip derivative notation: \frac{d}{dx} or \dfrac{d}{dx}
+            sub = s[idx:]
+            if sub.startswith(r'\frac{d}{d') or sub.startswith(r'\dfrac{d}{d'):
+                pos = after_cmd
+                continue
+
+            num_res = self._extract_latex_arg(s, after_cmd)
             if not num_res:
-                break
+                pos = after_cmd
+                continue
             num_str, next_idx = num_res
-            while next_idx < len(s) and s[next_idx].isspace():
-                next_idx += 1
-            if next_idx >= len(s) or s[next_idx] != '{':
-                break
-            den_res = self._extract_balanced_braces(s, next_idx)
+
+            den_res = self._extract_latex_arg(s, next_idx)
             if not den_res:
-                break
+                pos = after_cmd
+                continue
             den_str, end_idx = den_res
+
             num_str = self._replace_fractions(num_str)
             den_str = self._replace_fractions(den_str)
-            s = s[:idx] + f'(({num_str})/({den_str}))' + s[end_idx:]
+            replacement = f'(({num_str})/({den_str}))'
+            s = s[:idx] + replacement + s[end_idx:]
+            pos = idx + len(replacement)
         return s
 
     def _replace_sqrts(self, s: str) -> str:
-        while r'\sqrt' in s:
-            idx = s.find(r'\sqrt')
-            if idx == -1:
+        pattern = re.compile(r'\\sqrt(?![a-zA-Z])')
+        pos = 0
+        while True:
+            m = pattern.search(s, pos)
+            if not m:
                 break
-            p1 = s.find('{', idx + 5)
-            if p1 == -1:
-                break
-            inner_res = self._extract_balanced_braces(s, p1)
+            idx = m.start()
+            after_cmd = m.end()
+            inner_res = self._extract_latex_arg(s, after_cmd)
             if not inner_res:
-                break
+                pos = after_cmd
+                continue
             inner_str, end_idx = inner_res
             inner_str = self._replace_sqrts(inner_str)
-            s = s[:idx] + f'sqrt({inner_str})' + s[end_idx:]
+            replacement = f'sqrt({inner_str})'
+            s = s[:idx] + replacement + s[end_idx:]
+            pos = idx + len(replacement)
         return s
 
     @staticmethod
@@ -295,9 +331,9 @@ class SymPyWorker:
         s = s.replace(r'\ldotp\ldotp', '..').replace(r'\ldotp \ldotp', '..')
         s = s.replace(r'\ldots', '..').replace(r'\dots', '..')
 
-        # Derivatives: \frac{d}{dx} expr or \frac{d}{dx}(expr)
-        while r'\frac{d}{d' in s:
-            m = re.search(r'\\frac\{d\}\{d([a-zA-Z_][a-zA-Z0-9_]*)\}', s)
+        # Derivatives: \frac{d}{dx} expr, \dfrac{d}{dx} expr or \frac{d}{dx}(expr)
+        while re.search(r'\\(?:d)?frac\{d\}\{d', s):
+            m = re.search(r'\\(?:d)?frac\{d\}\{d([a-zA-Z_][a-zA-Z0-9_]*)\}', s)
             if not m:
                 break
             var = m.group(1)
