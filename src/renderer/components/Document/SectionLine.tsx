@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { ChevronDown, ChevronRight, Hash, Bookmark, BookOpen, MoreHorizontal } from 'lucide-react';
 import { SectionKind } from '../../../types/document';
+import { caretAtStart, caretAtEnd } from '../../utils/caret';
 
 interface SectionLineProps {
   id: string;
@@ -48,20 +49,37 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
   registerRef,
 }) => {
   const elRef = useRef<HTMLDivElement | null>(null);
+  const lastEmittedTitleRef = useRef<string>(title || '');
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
-  // Sync title from state only when not actively typing into this element
+  // Sync title from state when changed externally (e.g. Undo, Redo, Paste)
   useEffect(() => {
-    if (elRef.current && document.activeElement !== elRef.current) {
-      if (elRef.current.innerText !== title) {
-        elRef.current.innerText = title;
+    if (!elRef.current) return;
+    if (title === lastEmittedTitleRef.current && elRef.current.innerText === title) {
+      return;
+    }
+    lastEmittedTitleRef.current = title || '';
+    if (elRef.current.innerText !== title) {
+      elRef.current.innerText = title || '';
+      if (document.activeElement === elRef.current) {
+        try {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(elRef.current);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        } catch {
+          // ignore
+        }
       }
     }
   }, [title]);
 
   useEffect(() => {
     if (elRef.current) {
-      elRef.current.innerText = title;
+      elRef.current.innerText = title || '';
+      lastEmittedTitleRef.current = title || '';
     }
   }, []);
 
@@ -219,17 +237,32 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
           suppressContentEditableWarning={true}
           onFocus={onFocus}
           onInput={(e) => {
-            onChangeTitle(e.currentTarget.innerText);
+            const text = e.currentTarget.innerText;
+            lastEmittedTitleRef.current = text;
+            onChangeTitle(text);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              onToggleCollapse();
+            } else if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               onEnter();
+            } else if (e.key === 'Tab') {
+              e.preventDefault();
+              const next = e.shiftKey ? Math.max(1, level - 1) : Math.min(3, level + 1);
+              if (next !== level) {
+                const kinds = { 1: 'section', 2: 'subsection', 3: 'subsubsection' } as const;
+                onChangeLevel(next as 1 | 2 | 3, kinds[next as 1 | 2 | 3]);
+              }
             } else if (e.key === 'Backspace') {
               const text = e.currentTarget.innerText.trim();
               if (text === '') {
                 e.preventDefault();
                 onBackspaceEmpty();
+              } else if (caretAtStart(e.currentTarget)) {
+                e.preventDefault();
+                onNavigateUp();
               }
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();
@@ -237,6 +270,16 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
             } else if (e.key === 'ArrowDown') {
               e.preventDefault();
               onNavigateDown();
+            } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+              if (caretAtStart(e.currentTarget)) {
+                e.preventDefault();
+                onNavigateUp();
+              }
+            } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+              if (caretAtEnd(e.currentTarget)) {
+                e.preventDefault();
+                onNavigateDown();
+              }
             }
           }}
           className={`flex-1 outline-none font-serif text-[var(--text-primary)] select-text empty:before:content-['Section_title...'] empty:before:text-[var(--text-muted)] ${

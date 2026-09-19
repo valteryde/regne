@@ -59,6 +59,8 @@ interface DocumentContextValue {
   setZoom: (zoom: number | ((prev: number) => number)) => void;
   undo: () => void;
   redo: () => void;
+  focusRequest: { id: string; atEnd: boolean; offset?: number; nonce: number } | null;
+  requestElementFocus: (id: string, opts?: { atEnd?: boolean; offset?: number }) => void;
 }
 
 const DocumentContext = createContext<DocumentContextValue | null>(null);
@@ -225,7 +227,7 @@ function loadLastSession(): {
 }
 
 export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { evaluate } = useEngine();
+  const { evaluate, reset: resetEngine } = useEngine();
   const [initialSession] = useState(loadLastSession);
   const [doc, setDoc] = useState<RegneDocument>(initialSession.doc);
   const [activeElementId, setActiveElementId] = useState<string | null>(initialSession.activeId);
@@ -233,6 +235,24 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [zoom, setZoom] = useState<number>(initialSession.zoom);
   const [filePath, setFilePath] = useState<string | null>(initialSession.filePath);
   const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [focusRequest, setFocusRequest] = useState<{
+    id: string;
+    atEnd: boolean;
+    offset?: number;
+    nonce: number;
+  } | null>(null);
+
+  const requestElementFocus = useCallback(
+    (id: string, opts?: { atEnd?: boolean; offset?: number }) => {
+      setFocusRequest({
+        id,
+        atEnd: opts?.atEnd ?? false,
+        offset: opts?.offset,
+        nonce: Date.now() + Math.random(),
+      });
+    },
+    []
+  );
 
   // Ruler & Page Margin States
   const [isRulerVisible, setIsRulerVisible] = useState<boolean>(() => {
@@ -317,6 +337,11 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
             const diskDoc = JSON.parse(res.content) as RegneDocument;
             if (diskDoc && Array.isArray(diskDoc.elements)) {
               setDoc(diskDoc);
+              docRef.current = diskDoc;
+              historyRef.current = [{ doc: JSON.parse(JSON.stringify(diskDoc)), activeElementId: diskDoc.elements[0]?.id || null }];
+              historyIdxRef.current = 0;
+              setCanUndo(false);
+              setCanRedo(false);
               setIsDirty(false);
             }
           } catch {
@@ -342,30 +367,144 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     return () => clearTimeout(timer);
   }, [doc, filePath, activeElementId, zoom]);
 
-  const [history, setHistory] = useState<RegneDocument[]>([]);
-  const [historyIdx, setHistoryIdx] = useState<number>(-1);
+  interface HistorySnapshot {
+    doc: RegneDocument;
+    activeElementId: string | null;
+  }
 
-  const pushHistory = useCallback((newDoc: RegneDocument) => {
-    setHistory((prev) => [...prev.slice(0, historyIdx + 1), newDoc]);
-    setHistoryIdx((prev) => prev + 1);
+  const docRef = useRef<RegneDocument>(initialSession.doc);
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
+
+  const activeElementIdRef = useRef<string | null>(initialSession.activeId);
+  useEffect(() => {
+    activeElementIdRef.current = activeElementId;
+  }, [activeElementId]);
+
+  const historyRef = useRef<HistorySnapshot[]>([
+    {
+      doc: JSON.parse(JSON.stringify(initialSession.doc)),
+      activeElementId: initialSession.activeId,
+    },
+  ]);
+  const historyIdxRef = useRef<number>(0);
+  const [canUndo, setCanUndo] = useState<boolean>(false);
+  const [canRedo, setCanRedo] = useState<boolean>(false);
+
+  const updateCanUndoRedo = useCallback(() => {
+    setCanUndo(historyIdxRef.current > 0);
+    setCanRedo(historyIdxRef.current < historyRef.current.length - 1);
+  }, []);
+
+  const recordSnapshot = useCallback((newDoc?: RegneDocument, targetActiveId?: string | null) => {
+    const docToRecord = newDoc || docRef.current;
+    const activeIdToRecord = targetActiveId !== undefined ? targetActiveId : activeElementIdRef.current;
+    const snap: HistorySnapshot = {
+      doc: JSON.parse(JSON.stringify(docToRecord)),
+      activeElementId: activeIdToRecord,
+    };
+
+    const trimmed = historyRef.current.slice(0, historyIdxRef.current + 1);
+    trimmed.push(snap);
+
+    if (trimmed.length > 150) {
+      trimmed.shift();
+    }
+
+    historyRef.current = trimmed;
+    historyIdxRef.current = trimmed.length - 1;
+    updateCanUndoRedo();
     setIsDirty(true);
-  }, [historyIdx]);
+  }, [updateCanUndoRedo]);
+
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingInfoRef = useRef<{
+    elementId: string;
+    field: string;
+    value: string;
+    isDeleting: boolean;
+    lastCheckpointTime: number;
+  } | null>(null);
+
+  const flushTypingCheckpoint = useCallback(() => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    const currentSnap = historyRef.current[historyIdxRef.current];
+    if (currentSnap) {
+      const currentDocStr = JSON.stringify(docRef.current);
+      const snapDocStr = JSON.stringify(currentSnap.doc);
+      if (currentDocStr !== snapDocStr) {
+        recordSnapshot(docRef.current, activeElementIdRef.current);
+      }
+    }
+    lastTypingInfoRef.current = null;
+  }, [recordSnapshot]);
 
   const undo = useCallback(() => {
-    if (historyIdx > 0) {
-      setHistoryIdx(historyIdx - 1);
-      setDoc(history[historyIdx - 1]);
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
     }
-  }, [history, historyIdx]);
+
+    const currentHead = historyRef.current[historyIdxRef.current];
+    if (currentHead && JSON.stringify(docRef.current) !== JSON.stringify(currentHead.doc)) {
+      const trimmed = historyRef.current.slice(0, historyIdxRef.current + 1);
+      trimmed.push({
+        doc: JSON.parse(JSON.stringify(docRef.current)),
+        activeElementId: activeElementIdRef.current,
+      });
+      historyRef.current = trimmed;
+      historyIdxRef.current = trimmed.length - 1;
+    }
+
+    lastTypingInfoRef.current = null;
+
+    if (historyIdxRef.current > 0) {
+      historyIdxRef.current -= 1;
+      const targetSnapshot = historyRef.current[historyIdxRef.current];
+      const targetDoc = JSON.parse(JSON.stringify(targetSnapshot.doc)) as RegneDocument;
+      docRef.current = targetDoc;
+      setDoc(targetDoc);
+
+      if (targetSnapshot.activeElementId) {
+        setActiveElementId(targetSnapshot.activeElementId);
+        activeElementIdRef.current = targetSnapshot.activeElementId;
+      }
+
+      updateCanUndoRedo();
+      setIsDirty(true);
+    }
+  }, [updateCanUndoRedo]);
 
   const redo = useCallback(() => {
-    if (historyIdx < history.length - 1) {
-      setHistoryIdx(historyIdx + 1);
-      setDoc(history[historyIdx + 1]);
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
     }
-  }, [history, historyIdx]);
+    lastTypingInfoRef.current = null;
+
+    if (historyIdxRef.current < historyRef.current.length - 1) {
+      historyIdxRef.current += 1;
+      const targetSnapshot = historyRef.current[historyIdxRef.current];
+      const targetDoc = JSON.parse(JSON.stringify(targetSnapshot.doc)) as RegneDocument;
+      docRef.current = targetDoc;
+      setDoc(targetDoc);
+
+      if (targetSnapshot.activeElementId) {
+        setActiveElementId(targetSnapshot.activeElementId);
+        activeElementIdRef.current = targetSnapshot.activeElementId;
+      }
+
+      updateCanUndoRedo();
+      setIsDirty(true);
+    }
+  }, [updateCanUndoRedo]);
 
   const convertElementType = useCallback((id: string, newType: ElementType) => {
+    flushTypingCheckpoint();
     setDoc((prev) => {
       const elements = prev.elements.map((el) => {
         if (el.id !== id || el.type === newType) return el;
@@ -403,33 +542,49 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       });
       const updated = { ...prev, elements, updatedAt: Date.now() };
-      pushHistory(updated);
+      docRef.current = updated;
+      recordSnapshot(updated, id);
       return updated;
     });
     setIsDirty(true);
     setMode(newType);
     setActiveElementId(id);
-  }, [pushHistory]);
+    activeElementIdRef.current = id;
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const toggleMode = useCallback(() => {
-    let nextMode: ElementType = mode === 'text' ? 'math' : 'text';
+    const nextMode: ElementType = mode === 'text' ? 'math' : 'text';
     if (activeElementId) {
       const currentEl = doc.elements.find((e) => e.id === activeElementId);
-      if (currentEl) {
-        nextMode = currentEl.type === 'text' ? 'math' : 'text';
+      if (currentEl && (currentEl.type === 'text' || currentEl.type === 'math')) {
+        convertElementType(activeElementId, currentEl.type === 'text' ? 'math' : 'text');
+        return;
       }
-      convertElementType(activeElementId, nextMode);
-    } else {
-      setMode(nextMode);
     }
+    // Section elements (or nothing focused) are never converted by F5 —
+    // it only flips the mode used for newly inserted lines.
+    setMode(nextMode);
   }, [mode, activeElementId, doc.elements, convertElementType]);
 
   const setTitle = useCallback((title: string) => {
-    setDoc((prev) => ({ ...prev, title, updatedAt: Date.now() }));
+    setDoc((prev) => {
+      const updated = { ...prev, title, updatedAt: Date.now() };
+      docRef.current = updated;
+      return updated;
+    });
     setIsDirty(true);
-  }, []);
+
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+    }
+    typingTimerRef.current = setTimeout(() => {
+      flushTypingCheckpoint();
+    }, 400);
+  }, [flushTypingCheckpoint]);
 
   const updateElement = useCallback((id: string, updates: Partial<DocumentElement>) => {
+    const isEvaluatingOnly = updates.isEvaluating === true && Object.keys(updates).length === 1;
+
     setDoc((prev) => {
       const elements = prev.elements.map((el) => {
         if (el.id === id) {
@@ -437,12 +592,87 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
         return el;
       });
-      return { ...prev, elements, updatedAt: Date.now() };
+      const updated = { ...prev, elements, updatedAt: Date.now() };
+      docRef.current = updated;
+      return updated;
     });
     setIsDirty(true);
-  }, []);
+
+    if (isEvaluatingOnly) {
+      return;
+    }
+
+    const isTyping =
+      'input' in updates ||
+      'content' in updates ||
+      'title' in updates;
+
+    if (!isTyping) {
+      flushTypingCheckpoint();
+      recordSnapshot(undefined, id);
+      return;
+    }
+
+    const field = 'input' in updates ? 'input' : 'content' in updates ? 'content' : 'title';
+    const value = String((updates as any)[field] ?? '');
+
+    const prevInfo = lastTypingInfoRef.current;
+    const now = Date.now();
+
+    if (prevInfo && (prevInfo.elementId !== id || prevInfo.field !== field)) {
+      flushTypingCheckpoint();
+    }
+
+    const prevValue = prevInfo ? prevInfo.value : '';
+    const isDeleting = value.length < prevValue.length;
+
+    if (prevInfo && prevInfo.isDeleting !== isDeleting && prevValue !== value) {
+      flushTypingCheckpoint();
+    }
+
+    let isBoundary = false;
+    if (field === 'input') {
+      const lastChar = value.slice(-1);
+      isBoundary = /[+\-*\/=^()_,\s\\]/.test(lastChar);
+    } else {
+      const lastChar = value.slice(-1);
+      isBoundary = /[\s.,!?;:\n]/.test(lastChar);
+    }
+
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+
+    const timeSinceLastCheckpoint = prevInfo ? now - prevInfo.lastCheckpointTime : 0;
+    const charDiff = Math.abs(value.length - (prevInfo ? prevInfo.value.length : 0));
+
+    if (isBoundary && (timeSinceLastCheckpoint > 250 || charDiff >= 2)) {
+      recordSnapshot(undefined, id);
+      lastTypingInfoRef.current = {
+        elementId: id,
+        field,
+        value,
+        isDeleting,
+        lastCheckpointTime: now,
+      };
+    } else {
+      lastTypingInfoRef.current = {
+        elementId: id,
+        field,
+        value,
+        isDeleting,
+        lastCheckpointTime: prevInfo ? prevInfo.lastCheckpointTime : now,
+      };
+
+      typingTimerRef.current = setTimeout(() => {
+        flushTypingCheckpoint();
+      }, 400);
+    }
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const insertElement = useCallback((type: ElementType, afterId?: string): string => {
+    flushTypingCheckpoint();
     const newId = (type === 'section' ? 'sec-' : 'el-') + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
     let newEl: DocumentElement;
     if (type === 'text') {
@@ -466,15 +696,18 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       }
       const updated = { ...prev, elements, updatedAt: Date.now() };
-      pushHistory(updated);
+      docRef.current = updated;
+      recordSnapshot(updated, newId);
       return updated;
     });
 
     setActiveElementId(newId);
+    activeElementIdRef.current = newId;
     return newId;
-  }, [pushHistory]);
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const insertSection = useCallback((level: 1 | 2 | 3 = 1, afterId?: string, kind: SectionKind = 'section', title = ''): string => {
+    flushTypingCheckpoint();
     const newId = 'sec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
     const newEl: SectionElement = {
       id: newId,
@@ -498,15 +731,18 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       }
       const updated = { ...prev, elements, updatedAt: Date.now() };
-      pushHistory(updated);
+      docRef.current = updated;
+      recordSnapshot(updated, newId);
       return updated;
     });
 
     setActiveElementId(newId);
+    activeElementIdRef.current = newId;
     return newId;
-  }, [pushHistory]);
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const toggleSectionCollapse = useCallback((id: string) => {
+    flushTypingCheckpoint();
     setDoc((prev) => {
       const elements = prev.elements.map((el) => {
         if (el.id === id && el.type === 'section') {
@@ -515,11 +751,12 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         return el;
       });
       const updated = { ...prev, elements, updatedAt: Date.now() };
-      pushHistory(updated);
+      docRef.current = updated;
+      recordSnapshot(updated, id);
       return updated;
     });
     setIsDirty(true);
-  }, [pushHistory]);
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const scrollToElement = useCallback((id: string) => {
     // Uncollapse any parent sections if this element was hidden
@@ -554,6 +791,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, []);
 
   const deleteElement = useCallback((id: string) => {
+    flushTypingCheckpoint();
     setDoc((prev) => {
       if (prev.elements.length <= 1) return prev;
       const idx = prev.elements.findIndex((e) => e.id === id);
@@ -562,23 +800,31 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       const nextActive = elements[Math.max(0, idx - 1)]?.id || null;
       // Schedule activeElementId update outside the updater to avoid the React anti-pattern
       // of calling setState inside another setState's functional updater.
-      setTimeout(() => setActiveElementId(nextActive), 0);
+      setTimeout(() => {
+        setActiveElementId(nextActive);
+        activeElementIdRef.current = nextActive;
+      }, 0);
       const updated = { ...prev, elements, updatedAt: Date.now() };
-      pushHistory(updated);
+      docRef.current = updated;
+      recordSnapshot(updated, nextActive);
       return updated;
     });
-  }, [pushHistory]);
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const setElements = useCallback((elements: DocumentElement[], newActiveId?: string) => {
+    flushTypingCheckpoint();
+    const activeId = newActiveId || activeElementIdRef.current;
     setDoc((prev) => {
       const updated = { ...prev, elements, updatedAt: Date.now() };
-      pushHistory(updated);
+      docRef.current = updated;
+      recordSnapshot(updated, activeId);
       return updated;
     });
     if (newActiveId) {
       setActiveElementId(newActiveId);
+      activeElementIdRef.current = newActiveId;
     }
-  }, [pushHistory]);
+  }, [flushTypingCheckpoint, recordSnapshot]);
 
   const evaluateMath = useCallback(async (id: string) => {
     const el = doc.elements.find((e) => e.id === id);
@@ -821,9 +1067,19 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     const fresh = createInitialDocument();
     fresh.title = 'Untitled Document';
     setDoc(fresh);
+    docRef.current = fresh;
     setFilePath(null);
     setIsDirty(false);
-    setActiveElementId(fresh.elements[0]?.id || null);
+    const activeId = fresh.elements[0]?.id || null;
+    setActiveElementId(activeId);
+    activeElementIdRef.current = activeId;
+    historyRef.current = [{
+      doc: JSON.parse(JSON.stringify(fresh)),
+      activeElementId: activeId,
+    }];
+    historyIdxRef.current = 0;
+    setCanUndo(false);
+    setCanRedo(false);
 
     const api = window.regneAPI || window.hypatiaAPI;
     api?.updateWindowState({
@@ -845,11 +1101,21 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
           const parsed = JSON.parse(res.content) as RegneDocument;
           if (parsed && Array.isArray(parsed.elements)) {
             setDoc(parsed);
+            docRef.current = parsed;
             setFilePath(res.filePath || null);
             setIsDirty(false);
-            if (parsed.elements.length > 0) {
-              setActiveElementId(parsed.elements[0].id);
+            const activeId = parsed.elements[0]?.id || null;
+            if (activeId) {
+              setActiveElementId(activeId);
+              activeElementIdRef.current = activeId;
             }
+            historyRef.current = [{
+              doc: JSON.parse(JSON.stringify(parsed)),
+              activeElementId: activeId,
+            }];
+            historyIdxRef.current = 0;
+            setCanUndo(false);
+            setCanRedo(false);
             api.updateWindowState({
               filePath: res.filePath || null,
               isDirty: false,
@@ -871,11 +1137,21 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       const parsed = JSON.parse(data.content) as RegneDocument;
       if (parsed && Array.isArray(parsed.elements)) {
         setDoc(parsed);
+        docRef.current = parsed;
         setFilePath(data.filePath);
         setIsDirty(false);
-        if (parsed.elements.length > 0) {
-          setActiveElementId(parsed.elements[0].id);
+        const activeId = parsed.elements[0]?.id || null;
+        if (activeId) {
+          setActiveElementId(activeId);
+          activeElementIdRef.current = activeId;
         }
+        historyRef.current = [{
+          doc: JSON.parse(JSON.stringify(parsed)),
+          activeElementId: activeId,
+        }];
+        historyIdxRef.current = 0;
+        setCanUndo(false);
+        setCanRedo(false);
         const api = window.regneAPI || window.hypatiaAPI;
         api?.updateWindowState({
           filePath: data.filePath,
@@ -1003,11 +1279,30 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         case 'export-html':
           exportDocument('html');
           break;
+        case 'undo':
+          undo();
+          break;
+        case 'redo':
+          redo();
+          break;
         case 'evaluate-math':
           if (activeElementId) evaluateMath(activeElementId);
           break;
         case 'evaluate-all':
           evaluateAll();
+          break;
+        case 'insert-math': {
+          const newId = insertElement('math', activeElementId || undefined);
+          requestElementFocus(newId, { atEnd: false });
+          break;
+        }
+        case 'insert-text': {
+          const newId = insertElement('text', activeElementId || undefined);
+          requestElementFocus(newId, { atEnd: false });
+          break;
+        }
+        case 'restart-engine':
+          resetEngine();
           break;
         case 'zoom-in':
           setZoom((prev) => Math.min(2.0, Number((prev + 0.1).toFixed(1))));
@@ -1034,13 +1329,18 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     openDocument,
     newDocument,
     exportDocument,
+    undo,
+    redo,
     activeElementId,
     evaluateMath,
     evaluateAll,
     loadDocumentFromData,
+    insertElement,
+    requestElementFocus,
+    resetEngine,
   ]);
 
-  // Global keyboard shortcuts (F5, Cmd/Ctrl+S, Cmd/Ctrl+Shift+S, Cmd/Ctrl+O, Cmd/Ctrl+N)
+  // Global keyboard shortcuts (F5, Cmd/Ctrl+S, Cmd/Ctrl+Shift+S, Cmd/Ctrl+O, Cmd/Ctrl+N, Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'F5') {
@@ -1050,21 +1350,40 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
       if ((e.metaKey || e.ctrlKey) && !e.altKey) {
         const key = e.key.toLowerCase();
+        if (key === 'z') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.shiftKey) {
+            redo();
+          } else {
+            undo();
+          }
+          return;
+        }
+        if (key === 'y' && !e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          redo();
+          return;
+        }
         if (key === 's') {
           e.preventDefault();
+          e.stopPropagation();
           saveDocument(e.shiftKey);
         } else if (key === 'o' && !e.shiftKey) {
           e.preventDefault();
+          e.stopPropagation();
           openDocument();
         } else if (key === 'n' && !e.shiftKey) {
           e.preventDefault();
+          e.stopPropagation();
           newDocument();
         }
       }
     };
     window.addEventListener('keydown', handleKey, true);
     return () => window.removeEventListener('keydown', handleKey, true);
-  }, [toggleMode, saveDocument, openDocument, newDocument]);
+  }, [toggleMode, saveDocument, openDocument, newDocument, undo, redo]);
 
   return (
     <DocumentContext.Provider
@@ -1075,8 +1394,8 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         zoom,
         filePath,
         isDirty,
-        canUndo: historyIdx > 0,
-        canRedo: historyIdx < history.length - 1,
+        canUndo,
+        canRedo,
         activeInputRef,
         isRulerVisible,
         rulerPosition,
@@ -1112,6 +1431,8 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         setZoom,
         undo,
         redo,
+        focusRequest,
+        requestElementFocus,
       }}
     >
       {children}

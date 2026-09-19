@@ -132,7 +132,6 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
       submenu: [
         {
           label: 'Evaluate Math',
-          accelerator: 'Return',
           click: () => sendCommand('evaluate-math'),
         },
         {

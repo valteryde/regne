@@ -2,10 +2,19 @@ import React, { useRef, useEffect, useState, useCallback, useMemo, memo } from '
 import { useDocument } from '../../context/DocumentContext';
 import { MathField, MathFieldHandle } from '../MathEditor/MathField';
 import { KaTeXRenderer } from '../Worksheet/KaTeXRenderer';
-import { DocumentElement, ElementType, SectionElement, SectionKind } from '../../../types/document';
+import { DocumentElement, ElementType, SectionElement, SectionKind, TextElement } from '../../../types/document';
 import { computeOutline, getCollapsedElementIds, OutlineItem } from '../../utils/outline';
 import { SectionLine } from './SectionLine';
 import { ChevronRight, X } from 'lucide-react';
+import {
+  caretAtStart,
+  caretAtEnd,
+  caretOnFirstLine,
+  caretOnLastLine,
+  placeCaretAtCharOffset,
+  selectionCoversAll,
+  htmlTextLength,
+} from '../../utils/caret';
 
 interface SelectionRange {
   start: number;
@@ -27,8 +36,11 @@ interface TextLineProps {
   onFocus: () => void;
   onChange: (newContent: string) => void;
   onConvertToSection?: (level: 1 | 2 | 3, kind?: SectionKind, title?: string) => void;
-  onEnter: () => void;
+  onSplit: (headHtml: string, tailHtml: string) => void;
+  onInsertBelow: () => void;
   onBackspaceEmpty: () => void;
+  onBackspaceAtStart: () => void;
+  onDeleteAtEnd: () => void;
   onNavigateUp: () => void;
   onNavigateDown: () => void;
   onRowMouseDown: (e: React.MouseEvent) => void;
@@ -46,20 +58,39 @@ const TextLine: React.FC<TextLineProps> = memo(({
   onFocus,
   onChange,
   onConvertToSection,
-  onEnter,
+  onSplit,
+  onInsertBelow,
   onBackspaceEmpty,
+  onBackspaceAtStart,
+  onDeleteAtEnd,
   onNavigateUp,
   onNavigateDown,
   onRowMouseDown,
   registerRef,
 }) => {
   const elRef = useRef<HTMLDivElement | null>(null);
+  const lastEmittedContentRef = useRef<string>(content || '');
 
-  // Synchronize text from state only when this element is NOT actively being typed into
+  // Synchronize text from state when changed externally (e.g. Undo, Redo, Paste)
   useEffect(() => {
-    if (elRef.current && document.activeElement !== elRef.current) {
-      if (elRef.current.innerHTML !== content) {
-        elRef.current.innerHTML = content;
+    if (!elRef.current) return;
+    if (content === lastEmittedContentRef.current && elRef.current.innerHTML === content) {
+      return;
+    }
+    lastEmittedContentRef.current = content || '';
+    if (elRef.current.innerHTML !== content) {
+      elRef.current.innerHTML = content || '';
+      if (document.activeElement === elRef.current) {
+        try {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(elRef.current);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        } catch {
+          // ignore
+        }
       }
     }
   }, [content]);
@@ -67,7 +98,8 @@ const TextLine: React.FC<TextLineProps> = memo(({
   // Set initial content on mount
   useEffect(() => {
     if (elRef.current) {
-      elRef.current.innerHTML = content;
+      elRef.current.innerHTML = content || '';
+      lastEmittedContentRef.current = content || '';
     }
   }, []);
 
@@ -103,6 +135,7 @@ const TextLine: React.FC<TextLineProps> = memo(({
           onFocus={onFocus}
           onInput={(e) => {
             const htmlVal = e.currentTarget.innerHTML;
+            lastEmittedContentRef.current = htmlVal;
             const textVal = e.currentTarget.innerText;
             // Quick markdown triggers for converting to section
             if (onConvertToSection) {
@@ -130,42 +163,59 @@ const TextLine: React.FC<TextLineProps> = memo(({
             onChange(htmlVal);
           }}
           onKeyDown={(e) => {
+            const el = e.currentTarget;
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              onEnter();
+              if (e.metaKey || e.ctrlKey) {
+                onInsertBelow();
+                return;
+              }
+              const sel = window.getSelection();
+              if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                if (!range.collapsed) range.deleteContents();
+                const caret = sel.getRangeAt(0);
+                const tailRange = document.createRange();
+                tailRange.selectNodeContents(el);
+                tailRange.setStart(caret.endContainer, caret.endOffset);
+                const frag = tailRange.extractContents();
+                const tmp = document.createElement('div');
+                tmp.appendChild(frag);
+                onSplit(el.innerHTML, tmp.innerHTML);
+              } else {
+                onSplit(el.innerHTML, '');
+              }
             } else if (e.key === 'Backspace') {
-              const text = e.currentTarget.innerText.trim();
+              const text = el.innerText.trim();
               if (text === '') {
                 e.preventDefault();
                 onBackspaceEmpty();
+              } else if (caretAtStart(el)) {
+                e.preventDefault();
+                onBackspaceAtStart();
+              }
+            } else if (e.key === 'Delete') {
+              if (el.innerText.trim() !== '' && caretAtEnd(el)) {
+                e.preventDefault();
+                onDeleteAtEnd();
               }
             } else if (e.key === 'ArrowUp') {
-              const sel = window.getSelection();
-              let isAtTop = true;
-              if (sel && sel.rangeCount > 0) {
-                const range = sel.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                const containerRect = e.currentTarget.getBoundingClientRect();
-                if (rect.top > 0 && containerRect.top > 0 && rect.top - containerRect.top > 16) {
-                  isAtTop = false;
-                }
-              }
-              if (isAtTop) {
+              if (caretOnFirstLine(el)) {
                 e.preventDefault();
                 onNavigateUp();
               }
             } else if (e.key === 'ArrowDown') {
-              const sel = window.getSelection();
-              let isAtBottom = true;
-              if (sel && sel.rangeCount > 0) {
-                const range = sel.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                const containerRect = e.currentTarget.getBoundingClientRect();
-                if (rect.bottom > 0 && containerRect.bottom > 0 && containerRect.bottom - rect.bottom > 16) {
-                  isAtBottom = false;
-                }
+              if (caretOnLastLine(el)) {
+                e.preventDefault();
+                onNavigateDown();
               }
-              if (isAtBottom) {
+            } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+              if (caretAtStart(el)) {
+                e.preventDefault();
+                onNavigateUp();
+              }
+            } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+              if (caretAtEnd(el)) {
                 e.preventDefault();
                 onNavigateDown();
               }
@@ -203,8 +253,12 @@ interface MathLineProps {
   onFocus: () => void;
   onChange: (newContent: string) => void;
   onEvaluate: () => void;
+  onEvaluateInPlace: () => void;
+  onInsertBelow: () => void;
   onUnevaluate: () => void;
   onDeleteEmpty: () => void;
+  onBackspaceAtStart: () => void;
+  onDeleteAtEnd: () => void;
   onNavigateUp: () => void;
   onNavigateDown: () => void;
   onRowMouseDown: (e: React.MouseEvent) => void;
@@ -231,8 +285,12 @@ const MathLine: React.FC<MathLineProps> = memo(({
   onFocus,
   onChange,
   onEvaluate,
+  onEvaluateInPlace,
+  onInsertBelow,
   onUnevaluate,
   onDeleteEmpty,
+  onBackspaceAtStart,
+  onDeleteAtEnd,
   onNavigateUp,
   onNavigateDown,
   onRowMouseDown,
@@ -304,7 +362,11 @@ const MathLine: React.FC<MathLineProps> = memo(({
           onChange={onChange}
           onFocus={onFocus}
           onEvaluate={onEvaluate}
+          onEvaluateInPlace={onEvaluateInPlace}
+          onInsertBelow={onInsertBelow}
           onDelete={onDeleteEmpty}
+          onBackspaceAtStart={onBackspaceAtStart}
+          onDeleteAtEnd={onDeleteAtEnd}
           onNavigateUp={onNavigateUp}
           onNavigateDown={onNavigateDown}
           fontSize="1.25rem"
@@ -450,8 +512,11 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     saveDocument,
     openDocument,
     newDocument,
+    undo,
+    redo,
     pageMargins,
     paperWidth,
+    focusRequest,
   } = useDocument();
 
   const internalContainerRef = useRef<HTMLDivElement | null>(null);
@@ -460,9 +525,10 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
   const textRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const mathRefs = useRef<Map<string, MathFieldHandle>>(new Map());
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   // Focus and conversion tracking
-  const pendingFocusIdRef = useRef<{ id: string; atEnd: boolean } | null>(null);
+  const pendingFocusIdRef = useRef<{ id: string; atEnd: boolean; offset?: number } | null>(null);
   const prevElementTypesRef = useRef<Map<string, ElementType>>(new Map());
 
   // Multi-element selection range
@@ -479,6 +545,24 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     return map;
   }, [outlineItems]);
   const collapsedElementIds = useMemo(() => getCollapsedElementIds(doc.elements), [doc.elements]);
+  const visibleElements = useMemo(
+    () => doc.elements.filter((el) => !collapsedElementIds.has(el.id)),
+    [doc.elements, collapsedElementIds]
+  );
+
+  // Index of the nearest rendered (non-hidden) element at or after `index`.
+  // Falls back to searching backwards, returns -1 when nothing is visible.
+  const nearestVisibleIndex = useCallback(
+    (elements: DocumentElement[], index: number): number => {
+      let i = Math.max(0, Math.min(index, elements.length - 1));
+      while (i < elements.length && collapsedElementIds.has(elements[i].id)) i++;
+      if (i < elements.length) return i;
+      i = Math.max(0, Math.min(index, elements.length - 1));
+      while (i >= 0 && collapsedElementIds.has(elements[i].id)) i--;
+      return i;
+    },
+    [collapsedElementIds]
+  );
 
   const updateSelectionRange = useCallback((range: SelectionRange | null) => {
     selectionRangeRef.current = range;
@@ -486,7 +570,7 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
   }, []);
 
   // Directly attempt to focus an element by ID via handles or DOM
-  const focusElementById = useCallback((id: string, atEnd = false): boolean => {
+  const focusElementById = useCallback((id: string, atEnd = false, offset?: number): boolean => {
     setActiveElementId(id);
 
     // 1. Try section refs
@@ -498,13 +582,17 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
         secEl.focus();
       }
       try {
-        const sel = window.getSelection();
-        if (sel) {
-          const range = document.createRange();
-          range.selectNodeContents(secEl);
-          range.collapse(!atEnd);
-          sel.removeAllRanges();
-          sel.addRange(range);
+        if (offset !== undefined) {
+          placeCaretAtCharOffset(secEl, offset);
+        } else {
+          const sel = window.getSelection();
+          if (sel) {
+            const range = document.createRange();
+            range.selectNodeContents(secEl);
+            range.collapse(!atEnd);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
         }
       } catch {
         // ignore
@@ -529,13 +617,17 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
         textEl.focus();
       }
       try {
-        const sel = window.getSelection();
-        if (sel) {
-          const range = document.createRange();
-          range.selectNodeContents(textEl);
-          range.collapse(!atEnd);
-          sel.removeAllRanges();
-          sel.addRange(range);
+        if (offset !== undefined) {
+          placeCaretAtCharOffset(textEl, offset);
+        } else {
+          const sel = window.getSelection();
+          if (sel) {
+            const range = document.createRange();
+            range.selectNodeContents(textEl);
+            range.collapse(!atEnd);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
         }
       } catch {
         // ignore
@@ -574,14 +666,14 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
   }, [setActiveElementId, activeInputRef]);
 
   // Repeatedly attempt to focus across animation frames until mounted
-  const ensureFocusById = useCallback((id: string, atEnd = false, attempts = 20) => {
-    pendingFocusIdRef.current = { id, atEnd };
+  const ensureFocusById = useCallback((id: string, atEnd = false, offset?: number, attempts = 20) => {
+    pendingFocusIdRef.current = { id, atEnd, offset };
     setActiveElementId(id);
 
     const tryFocus = (remaining: number) => {
       if (pendingFocusIdRef.current?.id !== id) return;
 
-      if (focusElementById(id, atEnd)) {
+      if (focusElementById(id, atEnd, pendingFocusIdRef.current.offset)) {
         pendingFocusIdRef.current = null;
         return;
       }
@@ -594,15 +686,40 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     tryFocus(attempts);
   }, [focusElementById, setActiveElementId]);
 
-  // Focus an element by index
+  // Focus an element by index (resolves hidden elements to the nearest visible one)
   const focusElement = useCallback((index: number, atEnd = false) => {
     if (doc.elements.length === 0) return;
-    const clamped = Math.max(0, Math.min(index, doc.elements.length - 1));
-    const target = doc.elements[clamped];
-    if (target) {
-      ensureFocusById(target.id, atEnd);
-    }
-  }, [doc.elements, ensureFocusById]);
+    const targetIdx = nearestVisibleIndex(doc.elements, index);
+    if (targetIdx === -1) return;
+    ensureFocusById(doc.elements[targetIdx].id, atEnd);
+  }, [doc.elements, ensureFocusById, nearestVisibleIndex]);
+
+  // Move focus to the previous/next *visible* element relative to `id`.
+  // dir=-1 lands the caret at the end of the previous element; dir=+1 at the
+  // start of the next. Moving up past the first element focuses the title.
+  const focusNeighborOf = useCallback(
+    (id: string, dir: -1 | 1) => {
+      const pos = visibleElements.findIndex((e) => e.id === id);
+      const target = pos !== -1 ? visibleElements[pos + dir] : undefined;
+      if (target) {
+        ensureFocusById(target.id, dir === -1);
+      } else if (dir === -1 && titleInputRef.current) {
+        setActiveElementId(null);
+        const titleEl = titleInputRef.current;
+        try {
+          titleEl.focus({ preventScroll: true });
+        } catch {
+          titleEl.focus();
+        }
+        try {
+          titleEl.setSelectionRange(titleEl.value.length, titleEl.value.length);
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [visibleElements, ensureFocusById, setActiveElementId]
+  );
 
   // React to document element changes: fulfill pending focus & auto-focus converted lines
   const prevElementCountRef = useRef<number>(doc.elements.length);
@@ -622,8 +739,8 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
       const currentIds = new Set(doc.elements.map((e) => e.id));
       const deletedIdx = prevIds.findIndex((id) => !currentIds.has(id));
       if (deletedIdx !== -1 && doc.elements.length > 0) {
-        const targetIdx = Math.max(0, Math.min(deletedIdx, doc.elements.length - 1));
-        const targetId = doc.elements[targetIdx]?.id;
+        const targetIdx = nearestVisibleIndex(doc.elements, deletedIdx);
+        const targetId = targetIdx !== -1 ? doc.elements[targetIdx]?.id : undefined;
         if (targetId) {
           ensureFocusById(targetId, true);
         }
@@ -631,8 +748,8 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     }
 
     if (pendingFocusIdRef.current) {
-      const { id, atEnd } = pendingFocusIdRef.current;
-      ensureFocusById(id, atEnd);
+      const { id, atEnd, offset } = pendingFocusIdRef.current;
+      ensureFocusById(id, atEnd, offset);
     }
 
     doc.elements.forEach((el) => {
@@ -650,7 +767,13 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
         prevElementTypesRef.current.delete(id);
       }
     }
-  }, [doc.elements, ensureFocusById]);
+  }, [doc.elements, ensureFocusById, nearestVisibleIndex]);
+
+  // External focus requests (menu commands, context-level inserts)
+  useEffect(() => {
+    if (!focusRequest) return;
+    ensureFocusById(focusRequest.id, focusRequest.atEnd, focusRequest.offset);
+  }, [focusRequest, ensureFocusById]);
 
   // Global mouse drag selection across lines
   useEffect(() => {
@@ -729,7 +852,9 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     };
   }, [updateSelectionRange]);
 
-  // Global Keyboard Shortcuts (Capture Phase): Cmd+S, Cmd+O, Cmd+N, Cmd+A, Backspace, Delete, Type-to-replace, Cmd+C, Cmd+X, Escape
+  // Global Keyboard Shortcuts (Capture Phase): Cmd+A, Backspace, Delete,
+  // Type-to-replace, Cmd+C, Cmd+X, navigation & selection keys.
+  // File & history shortcuts (Cmd+S/O/N/Z/Y) live in DocumentContext.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeRange = selectionRangeRef.current;
@@ -738,32 +863,64 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
         document.activeElement instanceof HTMLInputElement &&
         document.activeElement.getAttribute('placeholder') === 'Document Title';
 
-      // 1. File shortcuts: Cmd+S, Cmd+Shift+S, Cmd+O, Cmd+N
-      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
-        const key = e.key.toLowerCase();
-        if (key === 's') {
-          e.preventDefault();
-          e.stopPropagation();
-          saveDocument(e.shiftKey);
+      const ae = document.activeElement as HTMLElement | null;
+      const editableEl =
+        ae && ae.isContentEditable && ae.closest('[data-element-idx]') ? ae : null;
+      const mathFieldEl =
+        ae && ae.tagName.toLowerCase() === 'math-field' ? ae : null;
+
+      // 1. Cmd+ArrowUp/Down & Cmd+Home/End: jump to document boundaries
+      //    (with Shift: extend the element-range selection to that boundary)
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End')
+      ) {
+        if (isInsideTitleInput) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (visibleElements.length === 0) return;
+        const toStart = e.key === 'ArrowUp' || e.key === 'Home';
+        const target = toStart ? visibleElements[0] : visibleElements[visibleElements.length - 1];
+
+        if (e.shiftKey) {
+          const curIdx = activeElementId
+            ? doc.elements.findIndex((el) => el.id === activeElementId)
+            : -1;
+          const targetIdx = doc.elements.findIndex((el) => el.id === target.id);
+          if (curIdx === -1 || targetIdx === -1 || curIdx === targetIdx) return;
+          if (editableEl) editableEl.blur();
+          else if (mathFieldEl) mathFieldEl.blur();
+          window.getSelection()?.removeAllRanges();
+          updateSelectionRange({
+            start: Math.min(curIdx, targetIdx),
+            end: Math.max(curIdx, targetIdx),
+          });
+          setActiveElementId(target.id);
           return;
         }
-        if (key === 'o' && !e.shiftKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          openDocument();
-          return;
-        }
-        if (key === 'n' && !e.shiftKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          newDocument();
-          return;
-        }
+
+        updateSelectionRange(null);
+        ensureFocusById(target.id, !toStart);
+        return;
       }
 
-      // 2. Cmd+A (or Ctrl+A): Select All lines across the document
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+      // 2. Cmd+A (or Ctrl+A): select line content first, then all elements
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'a') {
         if (isInsideTitleInput) return; // Allow native select-all in title input
+
+        if (editableEl) {
+          if (!selectionCoversAll(editableEl)) return; // native select-all within the line
+        } else if (mathFieldEl) {
+          try {
+            const mf = mathFieldEl as any;
+            const fullySelected =
+              !mf.selectionIsCollapsed && (mf.position === 0 || mf.position === mf.lastOffset);
+            if (!fullySelected) return; // let MathLive select-all within the field
+          } catch {
+            return;
+          }
+        }
 
         e.preventDefault();
         e.stopPropagation();
@@ -776,7 +933,30 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
         return;
       }
 
-      // 3. Backspace or Delete with active selectionRange
+      // 3. Cmd+Alt+1/2/3: set heading level (converts text line, retunes section)
+      if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const el = activeElementId ? doc.elements.find((x) => x.id === activeElementId) : undefined;
+        if (!el || el.type === 'math') return;
+        const level = parseInt(e.key, 10) as 1 | 2 | 3;
+        const kinds = { 1: 'section', 2: 'subsection', 3: 'subsubsection' } as const;
+        if (el.type === 'section') {
+          updateElement(el.id, { level, kind: kinds[level] });
+        } else {
+          updateElement(el.id, {
+            type: 'section',
+            title: (el.content || '').replace(/<[^>]*>/g, ''),
+            level,
+            kind: kinds[level],
+            collapsed: false,
+          } as any);
+          ensureFocusById(el.id, true);
+        }
+        return;
+      }
+
+      // 4. Backspace or Delete with active selectionRange
       if (e.key === 'Backspace' || e.key === 'Delete') {
         if (activeRange !== null) {
           e.preventDefault();
@@ -900,8 +1080,18 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
         }
       }
 
-      // 7. Shift+Arrow keys to extend selection
+      // 7. Shift+Arrow keys to extend selection.
+      // Inside a line, let the native editor extend the caret selection until it
+      // reaches the first/last visual line; only then start element-range selection.
       if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        if (mathFieldEl) return; // MathLive extends the selection inside the formula
+        if (editableEl) {
+          const atBoundary =
+            e.key === 'ArrowUp' ? caretOnFirstLine(editableEl) : caretOnLastLine(editableEl);
+          if (!atBoundary) return;
+          editableEl.blur();
+          window.getSelection()?.removeAllRanges();
+        }
         e.preventDefault();
         e.stopPropagation();
         const currentActiveIdx = activeElementId
@@ -947,9 +1137,9 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
     focusElement,
     activeElementId,
     setActiveElementId,
-    saveDocument,
-    openDocument,
-    newDocument,
+    visibleElements,
+    ensureFocusById,
+    updateElement,
   ]);
 
   return (
@@ -991,9 +1181,17 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
             {/* Document Title */}
             <div className="mb-6">
               <input
+                ref={titleInputRef}
                 type="text"
                 value={doc.title}
                 onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const first = visibleElements[0];
+                    if (first) ensureFocusById(first.id, false);
+                  }
+                }}
                 className="w-full text-2xl font-serif font-bold text-[var(--text-primary)] border-none outline-none bg-transparent p-0 placeholder:text-[var(--text-muted)] select-text"
                 placeholder="Document Title"
               />
@@ -1051,27 +1249,17 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
                     }}
                     onBackspaceEmpty={() => {
                       if (doc.elements.length > 1) {
-                        const prevIdx = Math.max(0, index - 1);
-                        const prevId = doc.elements[prevIdx]?.id;
+                        const pos = visibleElements.findIndex((e) => e.id === el.id);
+                        const prev = pos > 0 ? visibleElements[pos - 1] : visibleElements[pos + 1];
                         deleteElement(el.id);
-                        if (prevId) ensureFocusById(prevId, true);
+                        if (prev) ensureFocusById(prev.id, pos > 0);
                       } else {
                         convertElementType(el.id, 'text');
                         ensureFocusById(el.id, false);
                       }
                     }}
-                    onNavigateUp={() => {
-                      if (index > 0) {
-                        const prevId = doc.elements[index - 1]?.id;
-                        if (prevId) ensureFocusById(prevId, true);
-                      }
-                    }}
-                    onNavigateDown={() => {
-                      if (index < doc.elements.length - 1) {
-                        const nextId = doc.elements[index + 1]?.id;
-                        if (nextId) ensureFocusById(nextId, false);
-                      }
-                    }}
+                    onNavigateUp={() => focusNeighborOf(el.id, -1)}
+                    onNavigateDown={() => focusNeighborOf(el.id, 1)}
                     onRowMouseDown={handleRowMouseDown}
                     registerRef={(r) => {
                       if (r) sectionRefs.current.set(el.id, r);
@@ -1123,32 +1311,58 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
                     } as any);
                     ensureFocusById(el.id, true);
                   }}
-                  onEnter={() => {
-                    const newId = insertElement(mode, el.id);
+                  onSplit={(head, tail) => {
+                    updateElement(el.id, { content: head });
+                    const newId = insertElement('text', el.id);
+                    updateElement(newId, { content: tail });
+                    ensureFocusById(newId, false);
+                  }}
+                  onInsertBelow={() => {
+                    const newId = insertElement('text', el.id);
                     ensureFocusById(newId, false);
                   }}
                   onBackspaceEmpty={() => {
                     if (doc.elements.length > 1) {
-                      const prevIdx = Math.max(0, index - 1);
-                      const prevId = doc.elements[prevIdx]?.id;
+                      const pos = visibleElements.findIndex((e) => e.id === el.id);
+                      const prev = pos > 0 ? visibleElements[pos - 1] : visibleElements[pos + 1];
                       deleteElement(el.id);
-                      if (prevId) {
-                        ensureFocusById(prevId, true);
-                      }
+                      if (prev) ensureFocusById(prev.id, pos > 0);
                     }
                   }}
-                  onNavigateUp={() => {
-                    if (index > 0) {
-                      const prevId = doc.elements[index - 1]?.id;
-                      if (prevId) ensureFocusById(prevId, true);
+                  onBackspaceAtStart={() => {
+                    const pos = visibleElements.findIndex((e) => e.id === el.id);
+                    const prev = pos > 0 ? visibleElements[pos - 1] : undefined;
+                    if (!prev) return;
+                    if (prev.type === 'text') {
+                      const junction = htmlTextLength(prev.content || '');
+                      // Queue the focus request so the caret lands at the merge
+                      // junction only after React has committed the merged HTML.
+                      pendingFocusIdRef.current = { id: prev.id, atEnd: false, offset: junction };
+                      updateElement(prev.id, { content: (prev.content || '') + el.content });
+                      deleteElement(el.id);
+                      setActiveElementId(prev.id);
+                    } else {
+                      ensureFocusById(prev.id, true);
                     }
                   }}
-                  onNavigateDown={() => {
-                    if (index < doc.elements.length - 1) {
-                      const nextId = doc.elements[index + 1]?.id;
-                      if (nextId) ensureFocusById(nextId, false);
+                  onDeleteAtEnd={() => {
+                    const pos = visibleElements.findIndex((e) => e.id === el.id);
+                    const next = pos !== -1 ? visibleElements[pos + 1] : undefined;
+                    if (!next) return;
+                    if (next.type === 'text') {
+                      const junction = htmlTextLength(el.content || '');
+                      pendingFocusIdRef.current = { id: el.id, atEnd: false, offset: junction };
+                      updateElement(el.id, {
+                        content: (el.content || '') + (next as TextElement).content,
+                      });
+                      deleteElement(next.id);
+                      setActiveElementId(el.id);
+                    } else {
+                      ensureFocusById(next.id, false);
                     }
                   }}
+                  onNavigateUp={() => focusNeighborOf(el.id, -1)}
+                  onNavigateDown={() => focusNeighborOf(el.id, 1)}
                   onRowMouseDown={handleRowMouseDown}
                   registerRef={(r) => {
                     if (r) textRefs.current.set(el.id, r);
@@ -1187,35 +1401,40 @@ export const MathDocument: React.FC<MathDocumentProps> = ({ containerRef: extern
                   if (el.input && el.input.trim() !== '') {
                     evaluateMath(el.id);
                   }
-                  const newId = insertElement(mode, el.id);
+                  const pos = visibleElements.findIndex((e) => e.id === el.id);
+                  const next = pos !== -1 ? visibleElements[pos + 1] : undefined;
+                  if (next) {
+                    ensureFocusById(next.id, false);
+                  } else {
+                    const newId = insertElement(mode, el.id);
+                    ensureFocusById(newId, false);
+                  }
+                }}
+                onEvaluateInPlace={() => {
+                  if (el.input && el.input.trim() !== '') {
+                    evaluateMath(el.id);
+                  }
+                }}
+                onInsertBelow={() => {
+                  const newId = insertElement('math', el.id);
                   ensureFocusById(newId, false);
                 }}
                 onUnevaluate={() => unevaluateMath(el.id)}
                 onDeleteEmpty={() => {
                   if (doc.elements.length > 1) {
-                    const prevIdx = Math.max(0, index - 1);
-                    const prevId = doc.elements[prevIdx]?.id;
+                    const pos = visibleElements.findIndex((e) => e.id === el.id);
+                    const prev = pos > 0 ? visibleElements[pos - 1] : visibleElements[pos + 1];
                     deleteElement(el.id);
-                    if (prevId) {
-                      ensureFocusById(prevId, true);
-                    }
+                    if (prev) ensureFocusById(prev.id, pos > 0);
                   } else {
                     convertElementType(el.id, 'text');
                     ensureFocusById(el.id, false);
                   }
                 }}
-                onNavigateUp={() => {
-                  if (index > 0) {
-                    const prevId = doc.elements[index - 1]?.id;
-                    if (prevId) ensureFocusById(prevId, true);
-                  }
-                }}
-                onNavigateDown={() => {
-                  if (index < doc.elements.length - 1) {
-                    const nextId = doc.elements[index + 1]?.id;
-                    if (nextId) ensureFocusById(nextId, false);
-                  }
-                }}
+                onBackspaceAtStart={() => focusNeighborOf(el.id, -1)}
+                onDeleteAtEnd={() => focusNeighborOf(el.id, 1)}
+                onNavigateUp={() => focusNeighborOf(el.id, -1)}
+                onNavigateDown={() => focusNeighborOf(el.id, 1)}
                 onRowMouseDown={handleRowMouseDown}
                 registerRef={(h) => {
                   if (h) mathRefs.current.set(el.id, h);

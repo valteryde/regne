@@ -49,6 +49,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
     openDocument,
     undo,
     redo,
+    canUndo,
+    canRedo,
     evaluateAll,
   } = useDocument();
 
@@ -163,21 +165,23 @@ export const Ribbon: React.FC<RibbonProps> = ({
                 </button>
                 <div className="h-px bg-slate-100 my-1" />
                 <button
+                  disabled={!canUndo}
                   onClick={() => {
                     undo();
                     setOpenMenu(null);
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
+                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed text-left text-slate-700"
                 >
                   <span>Undo</span>
                   <span className="text-slate-400 text-[10px] font-mono">⌘Z</span>
                 </button>
                 <button
+                  disabled={!canRedo}
                   onClick={() => {
                     redo();
                     setOpenMenu(null);
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
+                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed text-left text-slate-700"
                 >
                   <span>Redo</span>
                   <span className="text-slate-400 text-[10px] font-mono">⇧⌘Z</span>

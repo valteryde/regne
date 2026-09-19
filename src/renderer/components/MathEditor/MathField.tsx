@@ -12,7 +12,11 @@ interface MathFieldProps {
   value: string;
   onChange?: (val: string) => void;
   onEvaluate?: () => void;
+  onEvaluateInPlace?: () => void;
+  onInsertBelow?: () => void;
   onDelete?: () => void;
+  onBackspaceAtStart?: () => void;
+  onDeleteAtEnd?: () => void;
   onFocus?: () => void;
   onNavigateUp?: () => void;
   onNavigateDown?: () => void;
@@ -29,7 +33,11 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
       value,
       onChange,
       onEvaluate,
+      onEvaluateInPlace,
+      onInsertBelow,
       onDelete,
+      onBackspaceAtStart,
+      onDeleteAtEnd,
       onFocus,
       onNavigateUp,
       onNavigateDown,
@@ -42,6 +50,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
     ref
   ) => {
     const mfRef = useRef<MathfieldElement | null>(null);
+    const lastEmittedValueRef = useRef<string>(value || '');
 
     // Keep callback refs stable so event listeners are attached only once
     const onChangeRef = useRef(onChange);
@@ -50,8 +59,20 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
     const onEvaluateRef = useRef(onEvaluate);
     onEvaluateRef.current = onEvaluate;
 
+    const onEvaluateInPlaceRef = useRef(onEvaluateInPlace);
+    onEvaluateInPlaceRef.current = onEvaluateInPlace;
+
+    const onInsertBelowRef = useRef(onInsertBelow);
+    onInsertBelowRef.current = onInsertBelow;
+
     const onDeleteRef = useRef(onDelete);
     onDeleteRef.current = onDelete;
+
+    const onBackspaceAtStartRef = useRef(onBackspaceAtStart);
+    onBackspaceAtStartRef.current = onBackspaceAtStart;
+
+    const onDeleteAtEndRef = useRef(onDeleteAtEnd);
+    onDeleteAtEndRef.current = onDeleteAtEnd;
 
     const onFocusRef = useRef(onFocus);
     onFocusRef.current = onFocus;
@@ -67,6 +88,8 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         const mf = mfRef.current;
         if (mf) {
           mf.executeCommand(['insert', snippet]);
+          lastEmittedValueRef.current = mf.value;
+          onChangeRef.current?.(mf.value);
           try {
             (mf as any).focus({ preventScroll: true });
           } catch {
@@ -229,23 +252,30 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
 
       const handleInput = () => {
         if (onChangeRef.current && mfRef.current) {
+          lastEmittedValueRef.current = mfRef.current.value;
           onChangeRef.current(mfRef.current.value);
         }
       };
 
       const handleMoveOut = (e: any) => {
         const dir = e.detail?.direction;
-        if ((dir === 'upward' || dir === 'up') && onNavigateUpRef.current) {
+        if (
+          (dir === 'upward' || dir === 'up' || dir === 'backward' || dir === 'left') &&
+          onNavigateUpRef.current
+        ) {
           e.preventDefault?.();
           onNavigateUpRef.current();
-        } else if ((dir === 'downward' || dir === 'down') && onNavigateDownRef.current) {
+        } else if (
+          (dir === 'downward' || dir === 'down' || dir === 'forward' || dir === 'right') &&
+          onNavigateDownRef.current
+        ) {
           e.preventDefault?.();
           onNavigateDownRef.current();
         }
       };
 
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter') {
           // If MathLive is in LaTeX input mode (e.g. user typed \delta and presses Enter to resolve it),
           // allow MathLive to handle Enter to complete the LaTeX command into the symbol atom first.
           if ((mf as any).mode === 'latex') {
@@ -253,14 +283,39 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
           }
           e.preventDefault();
           e.stopPropagation();
-          if (onEvaluateRef.current) {
+          if (e.metaKey || e.ctrlKey) {
+            if (onEvaluateInPlaceRef.current) onEvaluateInPlaceRef.current();
+            else if (onEvaluateRef.current) onEvaluateRef.current();
+          } else if (e.shiftKey) {
+            if (onInsertBelowRef.current) onInsertBelowRef.current();
+          } else if (onEvaluateRef.current) {
             onEvaluateRef.current();
           }
-        } else if (e.key === 'Backspace' && (!mf.value || mf.value.trim() === '')) {
-          if (onDeleteRef.current) {
+        } else if (e.key === 'Backspace') {
+          if (!mf.value || mf.value.trim() === '') {
+            if (onDeleteRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              onDeleteRef.current();
+            }
+          } else if (
+            mf.selectionIsCollapsed &&
+            mf.position === 0 &&
+            onBackspaceAtStartRef.current
+          ) {
             e.preventDefault();
             e.stopPropagation();
-            onDeleteRef.current();
+            onBackspaceAtStartRef.current();
+          }
+        } else if (e.key === 'Delete') {
+          if (
+            mf.selectionIsCollapsed &&
+            mf.position === mf.lastOffset &&
+            onDeleteAtEndRef.current
+          ) {
+            e.preventDefault();
+            e.stopPropagation();
+            onDeleteAtEndRef.current();
           }
         }
       };
@@ -284,18 +339,34 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
       };
     }, [readOnly]);
 
-    // Keep value synchronized ONLY when changed externally (never while user is typing in this field)
+    // Keep value synchronized when changed externally (e.g. Undo, Redo, Ribbon insert)
     useEffect(() => {
       const mf = mfRef.current;
       if (!mf) return;
 
-      const isFocused =
-        mf.hasFocus?.() ||
-        document.activeElement === mf ||
-        mf.shadowRoot?.contains(document.activeElement);
+      // If this update was emitted from typing in this field, do not re-set the value,
+      // which preserves cursor position and prevents interruptions.
+      if (value === lastEmittedValueRef.current && mf.value === value) {
+        return;
+      }
 
-      if (!isFocused && mf.value !== value) {
+      // External change detected (Undo, Redo, Ribbon insert, or external clear)
+      lastEmittedValueRef.current = value || '';
+      if (mf.value !== value) {
         (mf as any).setValue(value || '', { suppressChangeNotifications: true });
+
+        const isFocused =
+          mf.hasFocus?.() ||
+          document.activeElement === mf ||
+          mf.shadowRoot?.contains(document.activeElement);
+
+        if (isFocused) {
+          try {
+            mf.executeCommand('moveToMathfieldEnd');
+          } catch {
+            // ignore
+          }
+        }
       }
     }, [value]);
 
