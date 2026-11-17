@@ -38,6 +38,12 @@
   color: var(--page-ink) !important;
 }
 
+/* The sheet is painted as white paper. This flips that picture:
+   light and dark swap, then hue turns 180° so a blue figure stays blue. */
+.regne-sheet-invert {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 math-field {
   user-select: text !important;
   -webkit-user-select: text !important;

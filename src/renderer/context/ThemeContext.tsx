@@ -54,14 +54,26 @@ interface ThemeContextValue {
   setTheme: (id: ThemeId) => void;
   availableThemes: ThemeConfig[];
   isDark: boolean;
+  invertPage: boolean;
+  setInvertPage: (invert: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'regne_theme_id';
+const INVERT_KEY = 'regne:page-invert';
+
+function readInvertPage(): boolean {
+  try {
+    return localStorage.getItem(INVERT_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeId, setThemeIdState] = useState<ThemeId>('nordic');
+  const [invertPage, setInvertPageState] = useState(readInvertPage);
 
   const theme = useMemo(() => THEMES.nordic, []);
   const availableThemes = useMemo(() => [THEMES.nordic], []);
@@ -72,6 +84,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setThemeIdState(id);
     try {
       localStorage.setItem(STORAGE_KEY, id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const setInvertPage = (invert: boolean) => {
+    setInvertPageState(invert);
+    try {
+      localStorage.setItem(INVERT_KEY, invert ? '1' : '0');
     } catch {
       // ignore
     }
@@ -106,6 +127,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setTheme,
         availableThemes,
         isDark,
+        invertPage,
+        setInvertPage,
       }}
     >
       {children}

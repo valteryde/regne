@@ -3,6 +3,7 @@ import { Span } from "../../../language/ast";
 import { FreshValue, StatementDisplay } from "../../../language/displays";
 import { PageBlock, pageDocument } from "../../../language/page";
 import { PointerTarget } from "../../../language/selection";
+import { useTheme } from "../../context/ThemeContext";
 import { CSS_DPI, sheetScale } from "../../utils/pageGeometry";
 import { KaTeXRenderer } from "../Worksheet/KaTeXRenderer";
 import { readPointer } from "./pointer";
@@ -40,6 +41,7 @@ export const Sheet: React.FC<SheetProps> = ({
   onMouseDown,
   onPointerDown,
 }) => {
+  const { invertPage } = useTheme();
   const blocks = pageDocument(source, displays, selection, inlineValues);
   const width = paperWidth * CSS_DPI;
   const pageRef = useRef<HTMLDivElement>(null);
@@ -92,7 +94,10 @@ export const Sheet: React.FC<SheetProps> = ({
       }}
     >
       <div className="py-6" style={{ width: "fit-content", marginInline: "auto" }}>
-        <div className="relative overflow-hidden" style={{ width: fittedWidth, height: fittedHeight }}>
+        <div
+          className={`relative overflow-hidden${invertPage ? " regne-sheet-invert" : ""}`}
+          style={{ width: fittedWidth, height: fittedHeight }}
+        >
           <article
             ref={articleRef}
             className="absolute top-0 left-0 bg-white border border-[var(--border-color)] text-[var(--page-ink)]"

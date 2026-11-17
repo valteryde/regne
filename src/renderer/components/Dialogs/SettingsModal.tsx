@@ -14,6 +14,7 @@ import {
 import { UpdaterState, VenvSetupState } from '../../../preload';
 import { useDocument } from '../../context/DocumentContext';
 import { useEngine } from '../../context/EngineContext';
+import { useTheme } from '../../context/ThemeContext';
 import iconUrl from '../../assets/icon.png';
 
 interface SettingsModalProps {
@@ -235,6 +236,8 @@ function PageSettings({
   right: number;
   setPageMargins: (margins: { left: number; right: number }) => void;
 }) {
+  const { invertPage, setInvertPage } = useTheme();
+
   const setMargin = (side: 'left' | 'right', raw: string) => {
     const value = parseFloat(raw);
     if (Number.isNaN(value)) return;
@@ -247,10 +250,24 @@ function PageSettings({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[var(--text-secondary)]">
-        The sheet is US Letter, 8.5 inches wide. Margins inset the text.
+        The sheet is US Letter, 8.5 inches wide. Margins inset the text. Invert flips the painted
+        sheet, then turns hues back so figures keep their color.
       </p>
 
       <section className="border border-[var(--border-color)]">
+        <div className="flex items-center justify-between gap-3 px-3 h-10 border-b border-[var(--border-color)]">
+          <span className="text-[13px]">Invert colors</span>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Invert colors"
+            aria-checked={invertPage}
+            onClick={() => setInvertPage(!invertPage)}
+            className="text-[13px] text-[var(--icon-steel)] hover:text-[var(--text-primary)]"
+          >
+            {invertPage ? 'On' : 'Off'}
+          </button>
+        </div>
         <div className="flex items-center justify-between gap-3 px-3 h-10 border-b border-[var(--border-color)]">
           <span className="text-[13px]">Zoom</span>
           <div className="flex items-center">

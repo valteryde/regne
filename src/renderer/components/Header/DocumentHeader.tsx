@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Contrast,
   FileCode,
   FilePlus,
   FileText,
@@ -12,6 +13,7 @@ import {
   Settings,
   Undo2,
 } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 import iconUrl from '../../assets/icon.png';
 import { UNIT_NAMES } from '../../../language/units';
 import {
@@ -28,6 +30,7 @@ interface DocumentHeaderProps {
 }
 
 export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSettings }) => {
+  const { invertPage, setInvertPage } = useTheme();
   const title = label?.title || 'Regne';
   const computing = !label || label.computing;
   const broken = label?.broken ?? 0;
@@ -82,6 +85,14 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
 
       <div className="ml-auto flex items-center gap-1 shrink-0">
         <PowerStatus computing={computing} broken={broken} />
+        <HeaderButton
+          tone="steel"
+          label="Invert page"
+          pressed={invertPage}
+          onClick={() => setInvertPage(!invertPage)}
+        >
+          <Contrast />
+        </HeaderButton>
         <HeaderButton tone="clay" label="Settings" onClick={onOpenSettings}>
           <Settings />
         </HeaderButton>
