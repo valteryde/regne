@@ -1,16 +1,19 @@
 const fs = require('fs');
 const path = require('path');
 
-const src = path.resolve(__dirname, '../src/engine/sympyWorker.py');
 const destDir = path.resolve(__dirname, '../dist/engine');
-const dest = path.resolve(destDir, 'sympyWorker.py');
+const files = ['sympyWorker.py', 'irEval.py'];
 
-if (fs.existsSync(src)) {
-  if (!fs.existsSync(destDir)) {
-    fs.mkdirSync(destDir, { recursive: true });
+if (!fs.existsSync(destDir)) {
+  fs.mkdirSync(destDir, { recursive: true });
+}
+
+for (const name of files) {
+  const src = path.resolve(__dirname, '../src/engine', name);
+  if (!fs.existsSync(src)) {
+    console.warn('[copy-worker] Source worker script not found at:', src);
+    continue;
   }
-  fs.copyFileSync(src, dest);
-  console.log('[copy-worker] Copied sympyWorker.py to dist/engine/sympyWorker.py');
-} else {
-  console.warn('[copy-worker] Source worker script not found at:', src);
+  fs.copyFileSync(src, path.resolve(destDir, name));
+  console.log(`[copy-worker] Copied ${name} to dist/engine/${name}`);
 }

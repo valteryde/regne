@@ -5,6 +5,7 @@ import * as fsSync from 'fs';
 import { ChildProcess, spawn, spawnSync } from 'child_process';
 import * as readline from 'readline';
 import { createApplicationMenu } from './menu';
+import { listDirectory, searchFolder } from './workspaceFiles';
 import { autoUpdater } from 'electron-updater';
 import { macUpdater } from './macUpdater';
 
@@ -217,6 +218,58 @@ ipcMain.handle('file:readFile', async (_event, { filePath }) => {
   }
 });
 
+ipcMain.handle('dialog:openFolder', async () => {
+  if (!mainWindow) return { success: false, error: 'No main window' };
+
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Open Folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+    return { success: true, folderPath: result.filePaths[0] };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to open folder' };
+  }
+});
+
+ipcMain.handle('fs:listDirectory', async (_event, { root, dirPath }: { root?: string; dirPath?: string }) => {
+  try {
+    if (!root || !dirPath) return { success: false, error: 'Open a folder first.' };
+    const entries = await listDirectory(root, dirPath);
+    return { success: true, entries };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Could not read that folder.' };
+  }
+});
+
+ipcMain.handle('fs:recentDocuments', async () => {
+  const recent = typeof app.getRecentDocuments === 'function' ? app.getRecentDocuments() : [];
+  const paths: string[] = [];
+  for (const filePath of recent) {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) paths.push(filePath);
+    } catch {
+      // The file was moved or deleted.
+    }
+    if (paths.length >= 12) break;
+  }
+  return { success: true, paths };
+});
+
+ipcMain.handle('fs:search', async (_event, { root, query }: { root?: string; query?: string }) => {
+  try {
+    if (!root || typeof query !== 'string') return { success: false, error: 'Open a folder first.' };
+    const result = await searchFolder(root, query);
+    return { success: true, hits: result.hits, truncated: result.truncated };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Search failed.' };
+  }
+});
+
 // IPC: Confirm Discard Unsaved Changes
 ipcMain.handle('dialog:confirmDiscard', async (_event, { docTitle }) => {
   if (!mainWindow) return 'discard';
@@ -357,7 +410,12 @@ class SympyProcessManager {
   public isDedicatedVenvReady(): boolean {
     const venvPython = this.getVenvPythonPath();
     if (!fsSync.existsSync(venvPython)) return false;
-    return this.testPythonModule(venvPython, 'import sympy');
+    return this.hasMathEnvironment(venvPython);
+  }
+
+  /** SymPy without Pint exits as soon as a quantity is evaluated. */
+  private hasMathEnvironment(pyBin: string): boolean {
+    return this.testPythonModule(pyBin, 'import sympy, pint');
   }
 
   private notifySetupProgress(isSettingUp: boolean, message: string, error: string | null = null, ready = false): void {
@@ -481,15 +539,16 @@ class SympyProcessManager {
         this.notifySetupProgress(true, 'Installing SymPy and mathematical packages...');
         console.log(`[SymPy Manager] Installing packages with ${newVenvPip}`);
 
+        const mathPackages = ['sympy>=1.13.0', 'pint>=0.24'];
         try {
-          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', 'sympy>=1.13.0', 'kaxe>=1.8.1']);
+          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', ...mathPackages, 'kaxe>=1.8.1']);
         } catch (pipErr) {
-          console.warn('[SymPy Manager] Combined install failed, attempting sympy standalone:', pipErr);
-          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', 'sympy>=1.13.0']);
+          console.warn('[SymPy Manager] Plotting library failed, installing SymPy and Pint:', pipErr);
+          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', ...mathPackages]);
         }
 
-        if (!this.testPythonModule(newVenvPython, 'import sympy')) {
-          throw new Error('SymPy verification failed after pip installation in virtual environment.');
+        if (!this.hasMathEnvironment(newVenvPython)) {
+          throw new Error('SymPy and Pint were not importable after installing the math environment.');
         }
 
         console.log('[SymPy Manager] Dedicated venv provisioned successfully!');
@@ -543,7 +602,7 @@ class SympyProcessManager {
       return;
     }
 
-    // 1. If dedicated venv exists and has sympy, use it directly
+    // 1. If the dedicated environment can import SymPy and Pint, use it.
     if (this.isDedicatedVenvReady()) {
       const venvPy = this.getVenvPythonPath();
       console.log(`[SymPy Manager] Using dedicated Regne venv: ${venvPy}`);
@@ -551,16 +610,16 @@ class SympyProcessManager {
       return;
     }
 
-    // 2. If in development mode and local repository .venv has sympy, use it
+    // 2. In development, a repository environment with SymPy and Pint is enough.
     const isWin = process.platform === 'win32';
     const devPython = path.resolve(process.cwd(), isWin ? '.venv/Scripts/python.exe' : '.venv/bin/python3');
-    if (!app?.isPackaged && fsSync.existsSync(devPython) && this.testPythonModule(devPython, 'import sympy')) {
+    if (!app?.isPackaged && fsSync.existsSync(devPython) && this.hasMathEnvironment(devPython)) {
       console.log(`[SymPy Manager] Using developer repository venv: ${devPython}`);
       this.spawnWorker(devPython, workerScript);
       return;
     }
 
-    // 3. Check if any existing system Python has sympy
+    // 3. A system Python with SymPy and Pint can run while the private environment is installed.
     const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
     const candidatePythons: string[] = isWin
       ? [
@@ -581,7 +640,7 @@ class SympyProcessManager {
     let systemPythonWithSympy: string | null = null;
     for (const cand of candidatePythons) {
       if (path.isAbsolute(cand) && !fsSync.existsSync(cand)) continue;
-      if (this.testPythonModule(cand, 'import sympy')) {
+      if (this.hasMathEnvironment(cand)) {
         systemPythonWithSympy = cand;
         break;
       }
@@ -772,6 +831,58 @@ class SympyProcessManager {
     });
   }
 
+  public async evaluateIr(id: string, statements: unknown[]): Promise<any> {
+    if (this.isSettingUp && this.setupPromise) {
+      await this.setupPromise;
+    }
+
+    if (!this.process) {
+      this.start();
+    }
+
+    return new Promise((resolve, reject) => {
+      if (this.statusError) {
+        return resolve({
+          id,
+          success: false,
+          error: this.statusError,
+          executionTimeMs: 0,
+        });
+      }
+
+      const timer = setTimeout(() => {
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id);
+          resolve({
+            id,
+            success: false,
+            error: 'SymPy evaluation timed out (15s)',
+            executionTimeMs: 15000,
+          });
+        }
+      }, 15000);
+
+      this.pendingRequests.set(id, {
+        resolve: (val) => {
+          clearTimeout(timer);
+          resolve(val);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+
+      try {
+        this.process?.stdin?.write(JSON.stringify({ id, action: 'eval-ir', statements }) + '\n');
+      } catch (err) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(id);
+        reject(err);
+      }
+    });
+  }
+
   public async reset(): Promise<any> {
     const id = 'reset-' + Date.now();
     return new Promise((resolve, reject) => {
@@ -807,6 +918,10 @@ ipcMain.handle('cas:sympy:status', async () => {
 
 ipcMain.handle('cas:sympy:eval', async (_event, { id, code }) => {
   return sympyManager.evaluate(id, code);
+});
+
+ipcMain.handle('cas:sympy:eval-ir', async (_event, { id, statements }) => {
+  return sympyManager.evaluateIr(id, statements);
 });
 
 ipcMain.handle('cas:sympy:reset', async () => {

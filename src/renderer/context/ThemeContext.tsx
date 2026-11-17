@@ -27,23 +27,23 @@ export interface ThemeConfig {
 export const THEMES: Record<ThemeId, ThemeConfig> = {
   nordic: {
     id: 'nordic',
-    name: 'Nordic Paper',
-    category: 'light',
-    description: 'Crisp white LaTeX paper sheet with sapphire blue outputs',
+    name: 'Ink',
+    category: 'dark',
+    description: 'Warm black workspace, white page, steel blue results',
     colors: {
-      bgCanvas: '#ffffff',
-      bgChrome: '#ffffff',
-      bgSurface: '#ffffff',
-      bgSubtle: '#f1f5f9',
-      borderColor: '#e2e8f0',
-      textPrimary: '#0f172a',
-      textSecondary: '#475569',
-      textMuted: '#94a3b8',
-      mathInputColor: '#0f172a',
-      mathOutputColor: '#1d4ed8',
-      selectionBg: '#bfdbfe',
-      mascotBg: '#242e84',
-      mascotBorder: '#1c246b',
+      bgCanvas: '#100f0e',
+      bgChrome: '#171614',
+      bgSurface: '#171614',
+      bgSubtle: '#24211e',
+      borderColor: '#2c2926',
+      textPrimary: '#e6e2d8',
+      textSecondary: '#b7b1a6',
+      textMuted: '#8f8a82',
+      mathInputColor: '#1c1915',
+      mathOutputColor: '#3d5c78',
+      selectionBg: '#3a342c',
+      mascotBg: '#3d5c78',
+      mascotBorder: '#314c64',
     },
   },
 };
@@ -54,24 +54,45 @@ interface ThemeContextValue {
   setTheme: (id: ThemeId) => void;
   availableThemes: ThemeConfig[];
   isDark: boolean;
+  invertPage: boolean;
+  setInvertPage: (invert: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'regne_theme_id';
+const INVERT_KEY = 'regne:page-invert';
+
+function readInvertPage(): boolean {
+  try {
+    return localStorage.getItem(INVERT_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeId, setThemeIdState] = useState<ThemeId>('nordic');
+  const [invertPage, setInvertPageState] = useState(readInvertPage);
 
   const theme = useMemo(() => THEMES.nordic, []);
   const availableThemes = useMemo(() => [THEMES.nordic], []);
-  const isDark = false;
+  const isDark = true;
 
   const setTheme = (id: ThemeId) => {
     if (!THEMES[id]) return;
     setThemeIdState(id);
     try {
       localStorage.setItem(STORAGE_KEY, id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const setInvertPage = (invert: boolean) => {
+    setInvertPageState(invert);
+    try {
+      localStorage.setItem(INVERT_KEY, invert ? '1' : '0');
     } catch {
       // ignore
     }
@@ -106,6 +127,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setTheme,
         availableThemes,
         isDark,
+        invertPage,
+        setInvertPage,
       }}
     >
       {children}

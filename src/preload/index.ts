@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { DirEntry, SearchHit } from '../types/files';
 
 export interface UpdateProgress {
   percent: number;
@@ -52,6 +53,16 @@ export interface RegneAPI {
   confirmDiscard: (docTitle: string) => Promise<'save' | 'discard' | 'cancel'>;
   updateWindowState: (info: { filePath: string | null; isDirty: boolean; title: string }) => void;
   readFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  openFolder: () => Promise<{ success: boolean; folderPath?: string; canceled?: boolean; error?: string }>;
+  listDirectory: (
+    root: string,
+    dirPath: string
+  ) => Promise<{ success: boolean; entries?: DirEntry[]; error?: string }>;
+  recentDocuments: () => Promise<{ success: boolean; paths?: string[]; error?: string }>;
+  searchFolder: (
+    root: string,
+    query: string
+  ) => Promise<{ success: boolean; hits?: SearchHit[]; truncated?: boolean; error?: string }>;
   onMenuCommand: (callback: (command: string) => void) => () => void;
   onFileOpenRequest: (callback: (data: { filePath: string; content: string }) => void) => () => void;
   getPlatform: () => string;
@@ -59,6 +70,7 @@ export interface RegneAPI {
   casSympy: {
     getStatus: () => Promise<{ ready: boolean; error: string | null; version: string | null }>;
     evaluate: (id: string, code: string) => Promise<any>;
+    evaluateIr: (id: string, statements: unknown[]) => Promise<any>;
     reset: () => Promise<any>;
     interrupt: () => void;
     getSetupStatus: () => Promise<VenvSetupState>;
@@ -88,6 +100,18 @@ const api: RegneAPI = {
 
   readFile: (filePath: string) =>
     ipcRenderer.invoke('file:readFile', { filePath }),
+
+  openFolder: () =>
+    ipcRenderer.invoke('dialog:openFolder'),
+
+  listDirectory: (root: string, dirPath: string) =>
+    ipcRenderer.invoke('fs:listDirectory', { root, dirPath }),
+
+  recentDocuments: () =>
+    ipcRenderer.invoke('fs:recentDocuments'),
+
+  searchFolder: (root: string, query: string) =>
+    ipcRenderer.invoke('fs:search', { root, query }),
 
   exportDocument: (data: string, ext: string, filterName: string) =>
     ipcRenderer.invoke('dialog:exportDocument', { data, ext, filterName }),
@@ -121,6 +145,7 @@ const api: RegneAPI = {
   casSympy: {
     getStatus: () => ipcRenderer.invoke('cas:sympy:status'),
     evaluate: (id: string, code: string) => ipcRenderer.invoke('cas:sympy:eval', { id, code }),
+    evaluateIr: (id: string, statements: unknown[]) => ipcRenderer.invoke('cas:sympy:eval-ir', { id, statements }),
     reset: () => ipcRenderer.invoke('cas:sympy:reset'),
     interrupt: () => ipcRenderer.send('cas:sympy:interrupt'),
     getSetupStatus: () => ipcRenderer.invoke('cas:sympy:setup-status'),

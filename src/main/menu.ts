@@ -60,6 +60,10 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
           accelerator: 'CmdOrCtrl+O',
           click: () => sendCommand('open-file'),
         },
+        {
+          label: 'Open Folder...',
+          click: () => sendCommand('open-folder'),
+        },
         ...(!isMac ? [
           { type: 'separator' as const },
           {
@@ -113,44 +117,20 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
       ]
     },
     {
-      label: '&Insert',
-      submenu: [
-        {
-          label: 'Math Line',
-          accelerator: 'CmdOrCtrl+M',
-          click: () => sendCommand('insert-math'),
-        },
-        {
-          label: 'Text Paragraph',
-          accelerator: 'CmdOrCtrl+T',
-          click: () => sendCommand('insert-text'),
-        },
-      ]
-    },
-    {
-      label: '&Evaluate',
-      submenu: [
-        {
-          label: 'Evaluate Math',
-          click: () => sendCommand('evaluate-math'),
-        },
-        {
-          label: 'Evaluate Entire Document',
-          accelerator: 'CmdOrCtrl+Shift+Return',
-          click: () => sendCommand('evaluate-all'),
-        },
-        { type: 'separator' },
-        {
-          label: 'Restart CAS Engine (restart;)',
-          click: () => sendCommand('restart-engine'),
-        }
-      ]
-    },
-    {
       label: '&View',
       submenu: [
         {
-          label: 'Toggle Left Bar',
+          label: 'Explorer',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => sendCommand('show-explorer'),
+        },
+        {
+          label: 'Search',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => sendCommand('show-search'),
+        },
+        {
+          label: 'Toggle Sidebar',
           accelerator: 'CmdOrCtrl+B',
           click: () => sendCommand('toggle-sidebar'),
         },

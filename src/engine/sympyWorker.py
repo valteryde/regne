@@ -892,6 +892,30 @@ def main():
             print(json.dumps({"id": req_id, "success": True, "scope": worker.get_user_scope()}), flush=True)
             continue
 
+        if action == "eval-ir":
+            from irEval import evaluate_program
+            statements = req.get("statements")
+            if statements is None and "ir" in req:
+                statements = [req["ir"]]
+            start = time.perf_counter()
+            try:
+                results = evaluate_program(statements or [])
+                print(json.dumps({
+                    "id": req_id,
+                    "success": True,
+                    "results": results,
+                    "executionTimeMs": (time.perf_counter() - start) * 1000.0,
+                }), flush=True)
+            except Exception as err:
+                print(json.dumps({
+                    "id": req_id,
+                    "success": False,
+                    "resultType": "error",
+                    "error": str(err),
+                    "executionTimeMs": (time.perf_counter() - start) * 1000.0,
+                }), flush=True)
+            continue
+
         if action == "eval":
             code = req.get("code", "")
             start = time.perf_counter()

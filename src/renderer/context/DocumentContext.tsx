@@ -9,6 +9,7 @@ import {
   ElementType,
 } from '../../types/document';
 import { useEngine } from './EngineContext';
+import { dispatchSourceCommand, dispatchSourceFileOpen, sourceCommandsActive } from '../sourceCommands';
 
 interface DocumentContextValue {
   document: RegneDocument;
@@ -32,6 +33,7 @@ interface DocumentContextValue {
 
   setMode: (mode: ElementType) => void;
   toggleMode: () => void;
+  convertActiveLine: () => void;
   setTitle: (title: string) => void;
   setActiveElementId: (id: string | null) => void;
   updateElement: (id: string, updates: Partial<DocumentElement>) => void;
@@ -105,7 +107,7 @@ function createInitialDocument(): RegneDocument {
       {
         id: 'el-2',
         type: 'text',
-        content: 'To evaluate any math expression, press Enter on the math line. The symbolic result appears directly below in typeset blue notation.',
+        content: 'To evaluate a formula, press Cmd+Enter or Ctrl+Enter on the math line. Enter starts a new line. The symbolic result appears directly below in typeset blue notation.',
       },
       {
         id: 'el-3',
@@ -363,7 +365,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       } catch {
         // ignore storage errors
       }
-    }, 250);
+    }, 1000);
     return () => clearTimeout(timer);
   }, [doc, filePath, activeElementId, zoom]);
 
@@ -553,18 +555,16 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [flushTypingCheckpoint, recordSnapshot]);
 
   const toggleMode = useCallback(() => {
-    const nextMode: ElementType = mode === 'text' ? 'math' : 'text';
-    if (activeElementId) {
-      const currentEl = doc.elements.find((e) => e.id === activeElementId);
-      if (currentEl && (currentEl.type === 'text' || currentEl.type === 'math')) {
-        convertElementType(activeElementId, currentEl.type === 'text' ? 'math' : 'text');
-        return;
-      }
-    }
-    // Section elements (or nothing focused) are never converted by F5 —
-    // it only flips the mode used for newly inserted lines.
-    setMode(nextMode);
-  }, [mode, activeElementId, doc.elements, convertElementType]);
+    setMode((prev) => (prev === 'text' ? 'math' : 'text'));
+  }, []);
+
+  const convertActiveLine = useCallback(() => {
+    const id = activeElementIdRef.current;
+    if (!id) return;
+    const el = docRef.current.elements.find((e) => e.id === id);
+    if (!el) return;
+    convertElementType(id, el.type === 'math' ? 'text' : 'math');
+  }, [convertElementType]);
 
   const setTitle = useCallback((title: string) => {
     setDoc((prev) => {
@@ -583,7 +583,10 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [flushTypingCheckpoint]);
 
   const updateElement = useCallback((id: string, updates: Partial<DocumentElement>) => {
-    const isEvaluatingOnly = updates.isEvaluating === true && Object.keys(updates).length === 1;
+    const isEvaluatingOnly =
+      Object.keys(updates).length === 1 &&
+      'isEvaluating' in updates &&
+      updates.isEvaluating === true;
 
     setDoc((prev) => {
       const elements = prev.elements.map((el) => {
@@ -630,46 +633,23 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
       flushTypingCheckpoint();
     }
 
-    let isBoundary = false;
-    if (field === 'input') {
-      const lastChar = value.slice(-1);
-      isBoundary = /[+\-*\/=^()_,\s\\]/.test(lastChar);
-    } else {
-      const lastChar = value.slice(-1);
-      isBoundary = /[\s.,!?;:\n]/.test(lastChar);
-    }
-
     if (typingTimerRef.current) {
       clearTimeout(typingTimerRef.current);
       typingTimerRef.current = null;
     }
 
-    const timeSinceLastCheckpoint = prevInfo ? now - prevInfo.lastCheckpointTime : 0;
-    const charDiff = Math.abs(value.length - (prevInfo ? prevInfo.value.length : 0));
+    lastTypingInfoRef.current = {
+      elementId: id,
+      field,
+      value,
+      isDeleting,
+      lastCheckpointTime: prevInfo ? prevInfo.lastCheckpointTime : now,
+    };
 
-    if (isBoundary && (timeSinceLastCheckpoint > 250 || charDiff >= 2)) {
-      recordSnapshot(undefined, id);
-      lastTypingInfoRef.current = {
-        elementId: id,
-        field,
-        value,
-        isDeleting,
-        lastCheckpointTime: now,
-      };
-    } else {
-      lastTypingInfoRef.current = {
-        elementId: id,
-        field,
-        value,
-        isDeleting,
-        lastCheckpointTime: prevInfo ? prevInfo.lastCheckpointTime : now,
-      };
-
-      typingTimerRef.current = setTimeout(() => {
-        flushTypingCheckpoint();
-      }, 400);
-    }
-  }, [flushTypingCheckpoint, recordSnapshot]);
+    typingTimerRef.current = setTimeout(() => {
+      flushTypingCheckpoint();
+    }, 600);
+  }, [flushTypingCheckpoint]);
 
   const insertElement = useCallback((type: ElementType, afterId?: string): string => {
     flushTypingCheckpoint();
@@ -926,7 +906,8 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
 
     const input = activeInputRef.current;
-    if (input) {
+    const inDocument = input instanceof HTMLElement && !input.closest('[data-chrome]');
+    if (inDocument) {
       if ('executeCommand' in input) {
         (input as any).executeCommand(['insert', snippet]);
         try {
@@ -937,7 +918,12 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         return;
       }
 
-      if (input instanceof HTMLElement && input.isContentEditable) {
+      if (input.isContentEditable) {
+        try {
+          input.focus({ preventScroll: true });
+        } catch {
+          input.focus();
+        }
         document.execCommand('insertText', false, snippet);
         return;
       }
@@ -1246,6 +1232,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   // Synchronize OS window title and dirty indicator
   useEffect(() => {
+    if (sourceCommandsActive()) return;
     const api = window.regneAPI || window.hypatiaAPI;
     api?.updateWindowState({
       filePath,
@@ -1260,6 +1247,17 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (!api) return;
 
     const unsubCommand = api.onMenuCommand((cmd) => {
+      if (sourceCommandsActive()) {
+        if (cmd === 'save-file') { dispatchSourceCommand('save'); return; }
+        if (cmd === 'save-file-as') { dispatchSourceCommand('save-as'); return; }
+        if (cmd === 'open-file') { dispatchSourceCommand('open'); return; }
+        if (cmd === 'new-file') { dispatchSourceCommand('new'); return; }
+        if (cmd === 'undo') { dispatchSourceCommand('undo'); return; }
+        if (cmd === 'redo') { dispatchSourceCommand('redo'); return; }
+        if (cmd === 'export-latex') { dispatchSourceCommand('export'); return; }
+        if (cmd === 'export-html') { dispatchSourceCommand('export-html'); return; }
+        if (cmd === 'evaluate-math' || cmd === 'evaluate-all' || cmd === 'insert-math' || cmd === 'insert-text') return;
+      }
       switch (cmd) {
         case 'save-file':
           saveDocument(false);
@@ -1317,6 +1315,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const unsubFile = api.onFileOpenRequest((data) => {
+      if (dispatchSourceFileOpen(data.content, data.filePath)) return;
       loadDocumentFromData(data);
     });
 
@@ -1343,9 +1342,42 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
   // Global keyboard shortcuts (F5, Cmd/Ctrl+S, Cmd/Ctrl+Shift+S, Cmd/Ctrl+O, Cmd/Ctrl+N, Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'F5') {
+      if (sourceCommandsActive()) {
+        const inApp = !!(window.regneAPI || window.hypatiaAPI);
+        if (e.key === 'F5' && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'm') return;
+        if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+          const key = e.key.toLowerCase();
+          if (key === 'z' || (key === 'y' && !e.shiftKey)) {
+            if (!inApp) {
+              e.preventDefault();
+              e.stopPropagation();
+              dispatchSourceCommand(key === 'y' || e.shiftKey ? 'redo' : 'undo');
+            }
+            return;
+          }
+          if (key === 's' || (key === 'o' && !e.shiftKey) || (key === 'n' && !e.shiftKey)) {
+            if (!inApp) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (key === 's') dispatchSourceCommand(e.shiftKey ? 'save-as' : 'save');
+              else if (key === 'o') dispatchSourceCommand('open');
+              else dispatchSourceCommand('new');
+            }
+            return;
+          }
+        }
+        return;
+      }
+      if (e.key === 'F5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         toggleMode();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        e.stopPropagation();
+        convertActiveLine();
         return;
       }
       if ((e.metaKey || e.ctrlKey) && !e.altKey) {
@@ -1383,7 +1415,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
     window.addEventListener('keydown', handleKey, true);
     return () => window.removeEventListener('keydown', handleKey, true);
-  }, [toggleMode, saveDocument, openDocument, newDocument, undo, redo]);
+  }, [toggleMode, convertActiveLine, saveDocument, openDocument, newDocument, undo, redo]);
 
   return (
     <DocumentContext.Provider
@@ -1407,6 +1439,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         setPageMargins: handleSetPageMargins,
         setMode,
         toggleMode,
+        convertActiveLine,
         setTitle,
         setActiveElementId,
         updateElement,
