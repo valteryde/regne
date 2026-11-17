@@ -32,9 +32,9 @@ interface Opts {
  * `hit` is the span of one node, or null. It is not a raw caret.
  * Every node carries `htmlData`. Only the hit node carries `regne-hit`.
  */
-export function toLatex(node: Node, hit: Span | null): string {
+export function toLatex(node: Node, hit: Span | null, decorate = true): string {
   const hitNode = hit ? nodeBySpan(node, hit) : null;
-  return print(node, { decorate: true, hit: hitNode });
+  return print(node, { decorate, hit: hitNode });
 }
 
 function nodeBySpan(node: Node, span: Span): Node | null {

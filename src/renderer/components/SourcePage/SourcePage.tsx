@@ -13,6 +13,7 @@ import {
   storeValues,
 } from "../../../language/session";
 import { Span } from "../../../language/ast";
+import { exportLatex } from "../../../language/export";
 import { evaluationPlan } from "../../../language/page";
 import {
   PointerTarget,
@@ -210,6 +211,23 @@ export const SourcePage: React.FC = () => {
     void recomputeRef.current(text);
   };
 
+  const exportTex = async () => {
+    const text = editorRef.current?.getValue() ?? sourceRef.current;
+    const tex = exportLatex(text);
+    const api = window.regneAPI || window.hypatiaAPI;
+    const name = suggestedName(text).replace(/\.regne$/, ".tex");
+    if (api?.exportDocument) {
+      await api.exportDocument(tex, "tex", "LaTeX");
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([tex], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const save = async (saveAs: boolean): Promise<boolean> => {
     const text = editorRef.current?.getValue() ?? sourceRef.current;
     const api = window.regneAPI || window.hypatiaAPI;
@@ -255,8 +273,8 @@ export const SourcePage: React.FC = () => {
     applyText(CYLINDER_NOTE, null);
   };
 
-  const actions = useRef({ save, open, applyText, newFile, confirmLeave });
-  actions.current = { save, open, applyText, newFile, confirmLeave };
+  const actions = useRef({ save, open, applyText, newFile, confirmLeave, exportTex });
+  actions.current = { save, open, applyText, newFile, confirmLeave, exportTex };
 
   useEffect(() => {
     alive.current = true;
@@ -462,6 +480,7 @@ export const SourcePage: React.FC = () => {
         else if (command === "new") void actions.current.newFile();
         else if (command === "undo") editor?.trigger("menu", "undo", null);
         else if (command === "redo") editor?.trigger("menu", "redo", null);
+        else if (command === "export") void actions.current.exportTex();
       },
       (content, filePath) => {
         void (async () => {
