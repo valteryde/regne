@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, test } from "node:test";
+import { CYLINDER_NOTE, readDocument } from "../../src/language/document";
 import { lowerStatement } from "../../src/language/lower";
 import { parseStatement } from "../../src/language/parse";
 import { toLatex } from "../../src/language/toLatex";
@@ -91,6 +92,18 @@ describe("lowered statements evaluated by the worker", () => {
     assert.equal(joules.kind, "quantity");
     assert.match(joules.latex, /66000/);
     assert.match(joules.latex, /\\mathrm\{J\}/);
+  });
+
+  test("the cylinder note solves a temperature", () => {
+    const sources = readDocument(CYLINDER_NOTE).blocks.flatMap((block) =>
+      block.kind === "statement" && block.parsed ? [block.source] : [],
+    );
+    assert.equal(sources.length, 5);
+    const values = evaluate(sources);
+    const temperature = values[4];
+    assert.equal(temperature.kind, "quantity");
+    assert.match(temperature.latex, /3969/);
+    assert.match(temperature.latex, /\\mathrm\{K\}/);
   });
 
   test("diff of a quantity fails on that quantity's span", () => {

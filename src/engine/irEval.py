@@ -171,8 +171,8 @@ def _assign(node: dict, session: Session) -> dict:
 def _solve_equation(node: dict, session: Session) -> dict:
     left = eval_expr(node["left"], session)
     right = eval_expr(node["right"], session)
-    _reject_units(left, node)
-    _reject_units(right, node)
+    if isinstance(left, pint.Quantity) or isinstance(right, pint.Quantity):
+        return _solve_quantity_equation(left, right, node)
     equation = sympy.Eq(left, right)
     free = sorted(equation.free_symbols, key=lambda symbol: symbol.name)
     if len(free) > 1:
@@ -181,6 +181,113 @@ def _solve_equation(node: dict, session: Session) -> dict:
     if len(free) == 0:
         return format_value(sympy.simplify(equation))
     return _solutions(sympy.solve(equation, free[0]))
+
+
+def _solve_quantity_equation(left, right, node: dict) -> dict:
+    """Solve T = P*V/(n*R) by isolating one name and labeling it with a base unit."""
+    free = _free_symbols(left) | _free_symbols(right)
+    if len(free) > 1:
+        names = ", ".join(sorted(symbol.name for symbol in free))
+        raise IrError(f"Name the unknown with solve. More than one unbound name: {names}.", node["span"])
+    if len(free) == 0:
+        return _compare_quantities(left, right, node)
+    symbol = next(iter(free))
+    try:
+        coeff_left, const_left = _affine(left, symbol)
+        coeff_right, const_right = _affine(right, symbol)
+        coeff = _sub_term(coeff_left, coeff_right)
+        const = _sub_term(const_right, const_left)
+    except _NotLinear as err:
+        raise IrError("This equation is not linear in the unknown.", node["span"]) from err
+    except Exception as err:
+        raise IrError(_clean(err), node["span"]) from err
+    if _is_zero(coeff):
+        raise IrError("This equation does not determine the unknown.", node["span"])
+    try:
+        value = _div(const, coeff)
+    except Exception as err:
+        raise IrError(_clean(err), node["span"]) from err
+    if isinstance(value, pint.Quantity):
+        try:
+            value = value.to_base_units()
+        except Exception as err:
+            raise IrError(_clean(err), node["span"]) from err
+    return format_value(value)
+
+
+class _NotLinear(Exception):
+    pass
+
+
+def _free_symbols(value) -> set:
+    if isinstance(value, pint.Quantity):
+        magnitude = value.magnitude
+        if isinstance(magnitude, sympy.Basic):
+            return set(magnitude.free_symbols)
+        return set()
+    if isinstance(value, sympy.Basic):
+        return set(value.free_symbols)
+    return set()
+
+
+def _affine(value, symbol):
+    if isinstance(value, pint.Quantity):
+        coeff, rest = _split_linear(_as_expr(value.magnitude), symbol)
+        return (
+            UREG.Quantity(_magnitude(coeff), value.units),
+            UREG.Quantity(_magnitude(rest), value.units),
+        )
+    if isinstance(value, (int, float)) or (isinstance(value, sympy.Basic) and value.is_number and not value.free_symbols):
+        return sympy.Integer(0), _as_expr(value)
+    coeff, rest = _split_linear(_as_expr(value), symbol)
+    return coeff, rest
+
+
+def _split_linear(expr, symbol):
+    expanded = sympy.expand(expr)
+    coeff = expanded.coeff(symbol)
+    rest = sympy.expand(expanded - coeff * symbol)
+    if rest.free_symbols:
+        raise _NotLinear()
+    return coeff, rest
+
+
+def _sub_term(left, right):
+    if _is_zero(left):
+        return _negate(right, None)
+    if _is_zero(right):
+        return left
+    return left - right
+
+
+def _is_zero(value) -> bool:
+    if isinstance(value, pint.Quantity):
+        magnitude = value.magnitude
+        if isinstance(magnitude, sympy.Basic) and magnitude.free_symbols:
+            return False
+        try:
+            return float(magnitude) == 0.0
+        except Exception:
+            return False
+    if isinstance(value, sympy.Basic):
+        return value == 0
+    try:
+        return float(value) == 0.0
+    except Exception:
+        return False
+
+
+def _compare_quantities(left, right, node: dict) -> dict:
+    try:
+        if isinstance(left, pint.Quantity) and isinstance(right, pint.Quantity):
+            left_base = left.to_base_units()
+            right_base = right.to_base_units()
+            scale = max(1.0, abs(float(left_base.magnitude)))
+            equal = abs(float(left_base.magnitude) - float(right_base.magnitude)) <= 1e-9 * scale
+            return format_value(equal)
+        return format_value(False)
+    except Exception as err:
+        raise IrError(_clean(err), node["span"]) from err
 
 
 def _call(node: dict, session: Session) -> Any:

@@ -182,6 +182,44 @@ def _():
     assert r"\mathrm{K}" in result["latex"]
 
 
+def _unit_binary(op: str, left: dict, right: dict) -> dict:
+    return {"kind": "unitBinary", "op": op, "left": left, "right": right, "span": dict(S)}
+
+
+def _unit(name: str) -> dict:
+    return {"kind": "unit", "name": name, "span": dict(S)}
+
+
+@test("an equation of quantities solves the temperature in kelvin")
+def _():
+    gas_constant = {
+        "kind": "quantity",
+        "value": num("8.314"),
+        "unit": _unit_binary(
+            "/",
+            _unit("J"),
+            _unit_binary("*", _unit("mol"), _unit("K")),
+        ),
+        "span": dict(S),
+    }
+    results = evaluate_program([
+        {"kind": "assign", "target": sym("n"), "value": qty("2", "mol"), "span": dict(S)},
+        {"kind": "assign", "target": sym("P"), "value": qty("10", "bar"), "span": dict(S)},
+        {"kind": "assign", "target": sym("V"), "value": qty("66", "L"), "span": dict(S)},
+        {"kind": "assign", "target": sym("R"), "value": gas_constant, "span": dict(S)},
+        {
+            "kind": "equation",
+            "left": sym("T"),
+            "right": binary("/", binary("*", sym("P"), sym("V")), binary("*", sym("n"), sym("R"))),
+            "span": dict(S),
+        },
+    ])
+    solved = results[-1]
+    assert solved["kind"] == "quantity"
+    assert "3969" in solved["latex"]
+    assert r"\mathrm{K}" in solved["latex"]
+
+
 @test("plot of sine over a domain returns an svg")
 def _():
     domain = {
