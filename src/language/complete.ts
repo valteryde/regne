@@ -59,7 +59,8 @@ export function suggestions(before: string): string[] {
   return pool.filter((name) => name.startsWith(partial));
 }
 
-function opensUnit(before: string): boolean {
+/** `[` after a value or `in` opens a unit. `[` in any other place opens a list. */
+export function opensUnit(before: string): boolean {
   const trimmed = before.trimEnd();
   if (/(?:^|\s)in$/.test(trimmed)) return true;
   return /[\w)\]]$/.test(trimmed);
