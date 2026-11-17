@@ -1,138 +1,26 @@
-# Regne — Mathematical CAS Document Workspace
+# Regne
 
-**Regne** is a Maple-inspired Computer Algebra System (CAS) document workspace built with **Electron, React, TypeScript, and KaTeX**.
+Regne is a document for calculations. The file is the source. The page beside it is the note: headings, prose, and mathematics, with the result under each statement.
 
-Unlike traditional notebook interfaces that divide computation into boxed cells, Regne embraces Maple's **Document Mode**: a continuous, word-processor document flow where text narratives and mathematical evaluations coexist seamlessly on a clean page.
+A line is a statement unless it says otherwise.
 
----
+| Line | On the page |
+| --- | --- |
+| `# Charge in a cylinder` | A heading. The marker is not printed. |
+| `-- The holdup is fixed.` | A paragraph. |
+| `n := 2 [mol]` | The quantity, and its value underneath. |
+| `T = P*V / (n*R)` | The equation, and the solved quantity. |
+| `// a note` | Nothing. |
 
-## Core Characteristics
+`$diff(x^2, x)$` inside a paragraph typesets in the sentence. `plot(sin(x), x = -5..5)` draws under that statement. A file that still starts with `{` is a legacy document and can be imported as text.
 
-- **Continuous Document Flow (No Cells)**:
-  - Text and math flow together on a clean white document sheet without notebook cell boxes, left grouping brackets, or hover action toolbars.
-  - Type explanations and theorems in normal **Text** mode.
-  - Switch to **Math** mode (or press `F5` / click `Math` in the ribbon) to enter mathematical expressions.
-  - Press `Enter` on any math line: the expression evaluates in-place and its royal blue typeset result renders directly underneath.
-- **Dialed-Back, Restrained UI**:
-  - Distraction-free desktop interface focused on document composition.
-  - Clean top ribbon: `Text / Math` mode toggle (`F5`), `Evaluate` (`Enter`), `+ Math`, `+ Text`, `Save`, `Open`, `Export`.
-  - Optional compact mathematical symbol palette for inserting calculus templates, Greek letters, and common symbols.
-- **Extensible CAS Solver Architecture**:
-  - Full decoupling between document rendering and mathematical computation.
-  - Well-defined `ICasEngine` interface ready for future solvers (such as Python SymPy, Giac, Math.js, or WebAssembly engines).
-  - Built-in reference **Mock CAS Engine** providing symbolic transforms, calculus, polynomial expansions, factoring, equation solving, and session variables (`radius := 5;`).
-- **File Serialization & Export**:
-  - Save and Open `.regne` JSON document files (with backwards-compatible `.hypatia` support).
-  - Export directly to **LaTeX** (`.tex`) and **Interactive HTML** (`.html`).
-
----
-
-## Project Architecture
-
-```
-wise-regne/
-├── src/
-│   ├── main/
-│   │   ├── main.ts              # Electron window lifecycle & file dialog IPCs
-│   │   └── menu.ts              # Native application menu
-│   ├── preload/
-│   │   └── index.ts             # Secure contextBridge (window.regneAPI)
-│   ├── engine/                  # Pluggable CAS Solver Layer
-│   │   ├── types.ts             # ICasEngine abstraction contract
-│   │   ├── engineManager.ts     # Solver registry, lifecycle & queue management
-│   │   ├── mockEngine.ts        # Built-in reference symbolic CAS engine
-│   │   ├── pythonSympyBridge.ts # Template adapter for external Python/SymPy solvers
-│   │   └── README.md            # Solver integration guide
-│   ├── renderer/
-│   │   ├── App.tsx              # Clean document layout
-│   │   ├── main.tsx             # React entry point
-│   │   ├── index.css            # KaTeX & typography styles
-│   │   ├── context/
-│   │   │   ├── DocumentContext.tsx # Continuous document flow & evaluation
-│   │   │   └── EngineContext.tsx   # React provider bridging CAS engine events
-│   │   └── components/
-│   │       ├── Worksheet/
-│   │       │   ├── DocumentEditor.tsx # Continuous document page editor
-│   │       │   └── KaTeXRenderer.tsx  # Crisp typeset math rendering
-│   │       ├── Palettes/        # Compact symbol & calculus palettes
-│   │       ├── Toolbar/         # Minimal document ribbon
-│   │       └── Dialogs/         # Clean export dialog
-│   └── types/
-│       └── document.ts          # Continuous document data model
-└── test/
-    └── engine.test.ts           # Automated test suite for CAS engine layer
-```
-
----
-
-## Getting Started
+## Run
 
 ```bash
-# Install dependencies
 npm install
-
-# Start development mode with Vite hot-reloading
 npm run dev
-
-# Start Electron production app
-npm start
-
-# Run production build
-npm run build
-
-# Run automated CAS engine tests
 npm test
+npm start
 ```
 
----
-
-## Connecting a Future CAS Solver
-
-Implement `ICasEngine` in [`src/engine/types.ts`](file:///Users/vdaugb/Documents/antigravity/wise-hypatia/src/engine/types.ts):
-
-```typescript
-import { ICasEngine, CasEvaluationRequest, CasEvaluationResult } from './types';
-
-export class MyCustomSolver implements ICasEngine {
-  readonly metadata = {
-    id: 'my-solver',
-    name: 'My Custom Solver',
-    version: '1.0.0',
-    description: 'External CAS Solver',
-    backend: 'python', // or 'wasm', 'javascript', 'native'
-    capabilities: {
-      symbolicMath: true,
-      numericEval: true,
-      calculus: true,
-      linearAlgebra: true,
-      arbitraryPrecision: true,
-      customFunctions: true,
-    },
-    status: 'ready',
-  };
-
-  async initialize() {}
-  async evaluate(request: CasEvaluationRequest): Promise<CasEvaluationResult> {
-    return {
-      id: request.id,
-      success: true,
-      resultLatex: '\\frac{1}{2}',
-      resultText: '1/2',
-      resultType: 'expression',
-      executionTimeMs: 10,
-    };
-  }
-  async interrupt() {}
-  async reset() {}
-  async getScope() { return {}; }
-  async terminate() {}
-  onStatusChange(fn) { return () => {}; }
-  onScopeChange(fn) { return () => {}; }
-}
-```
-
-Register with the central manager:
-```typescript
-import { EngineManager } from './engineManager';
-EngineManager.getInstance().registerEngine(new MyCustomSolver());
-```
+`npm run dev` serves the window and a local engine. `npm start` builds the desktop app. The app keeps SymPy, Pint, and Kaxe in its own Python environment, and Settings can repair that environment. A release is published by pushing a `v*` tag; the workflow builds macOS and Windows and attaches the installers to the GitHub release.
