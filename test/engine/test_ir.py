@@ -43,6 +43,7 @@ def _():
     assert r"\mathrm{bar}" in result["latex"]
     assert r"\cdot" in result["latex"]
     assert r"\mathrm{l}" in result["latex"]
+    assert r"\frac" not in result["latex"]
 
 
 @test("a product of bar and liter converts to joules")
@@ -216,8 +217,11 @@ def _():
     ])
     solved = results[-1]
     assert solved["kind"] == "quantity"
-    assert "3969" in solved["latex"]
+    assert "3969.21" in solved["latex"]
     assert r"\mathrm{K}" in solved["latex"]
+    assert r"\frac" not in solved["latex"]
+    gas = results[3]
+    assert r"\mathrm{J}/(\mathrm{K} \cdot \mathrm{mol})" in gas["latex"] or r"\mathrm{J}/(\mathrm{mol} \cdot \mathrm{K})" in gas["latex"]
 
 
 @test("plot of sine over a domain returns an svg")

@@ -657,6 +657,38 @@ def _latex_item(item) -> str:
     return str(item)
 
 
+def _unit_latex(unit: pint.Unit) -> str:
+    """Compact Pint symbols, with \\mathrm, \\cdot, and a slash."""
+    compact = format(unit, "~").strip()
+    if compact and all(ch.isalpha() or ch.isdigit() or ch in " */" for ch in compact):
+        return _compact_unit_latex(compact)
+    return format(unit, "~L")
+
+
+def _compact_unit_latex(text: str) -> str:
+    pieces = [piece.strip() for piece in text.split("/")]
+    numerator = _product_latex(pieces[0])
+    if len(pieces) == 1:
+        return numerator
+    denominators = [_product_latex(piece) for piece in pieces[1:]]
+    if len(denominators) == 1:
+        return f"{numerator}/{denominators[0]}"
+    return numerator + "/(" + r" \cdot ".join(denominators) + ")"
+
+
+def _product_latex(text: str) -> str:
+    return r" \cdot ".join(_factor_latex(factor.strip()) for factor in text.split("*"))
+
+
+def _factor_latex(token: str) -> str:
+    if token == "1":
+        return "1"
+    if "**" in token:
+        name, exponent = (part.strip() for part in token.split("**", 1))
+        return rf"\mathrm{{{name}}}^{{{exponent}}}"
+    return rf"\mathrm{{{token}}}"
+
+
 def format_value(value) -> dict:
     if isinstance(value, PlotValue):
         return {"kind": "plot", "latex": "", "text": "", "span": None, "svg": value.svg}
@@ -666,7 +698,7 @@ def format_value(value) -> dict:
         if value.dimensionless:
             return format_value(_magnitude(value.magnitude))
         mag = _format_magnitude(value.magnitude)
-        unit = format(value.units, "~L")
+        unit = _unit_latex(value.units)
         return {
             "kind": "quantity",
             "latex": f"{mag}\\,{unit}",
@@ -710,7 +742,7 @@ def _format_magnitude(value) -> str:
         nearest = round(value)
         if abs(value - nearest) <= 1e-9 * max(1.0, abs(value)):
             return str(int(nearest))
-        return format(value, ".12g")
+        return format(value, ".6g")
     if isinstance(value, int):
         return str(value)
     return str(value)
