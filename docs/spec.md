@@ -116,21 +116,25 @@ An equation with one unbound symbol is solved for that symbol. `0 = x^2 + 2*x - 
 ```text
 expression  = conversion
 conversion  = comparison ("in" unit)?
-comparison  = sum (("<" | "<=" | ">" | ">=") sum)?
+comparison  = range (("<" | "<=" | ">" | ">=") range)?
+range       = sum (".." sum)?
 sum         = term (("+" | "-") term)*
 term        = factor (("*" | "/") factor)*
 factor      = power
-power       = unary ("^" unary)*
+power       = unary ("^" power)?
 unary       = ("+" | "-") unary | postfix
 postfix     = primary unit?
-primary     = number | name | call | "(" expression ")" | list
+primary     = number | name | call | group | list
+group       = "(" equation ("," equation)* ")"
 call        = name "(" arguments? ")"
-arguments   = expression ("," expression)*
-list        = "[" expression ("," expression)* "]"
+arguments   = equation ("," equation)*
+list        = "[" equation ("," equation)* "]"
 unit        = "[" unitexpr "]"
 ```
 
-`^` is power, right-associative. `*` and `/` are left-associative. Juxtaposition is not multiplication: `2x` is an error, and the author writes `2*x`. The one place two tokens sit beside each other without an operator is a value and its unit: `10 [bar]`.
+`^` is power, right-associative, and it is built from unary expressions. `-2^2` is `(-2)^2`. `a^b^c` is `a^(b^c)`. `*` and `/` are left-associative. Juxtaposition is not multiplication: `2x` is an error, and the author writes `2*x`. The one place two tokens sit beside each other without an operator is a value and its unit: `10 [bar]`.
+
+`..` is a range. It binds looser than `+`, so `-5..5` is the range from `-5` to `5`. A call may contain an equation, which is how `solve(x^2 = 4, x)` and `plot(sin(x), x = -5..5)` are written. That is the same equation node as a statement. `plot` reads it as a domain when it evaluates. Parentheses around one equation only group it. Parentheses around a comma-separated list are the tuple in `integrate(f, (x, a, b))`.
 
 Whitespace around `[` is optional. `10[bar]` and `10 [bar]` are the same quantity.
 
@@ -225,7 +229,7 @@ Equation    0 = x^2 + 2*x - 4
 
 `to_latex(node, hit)` walks the tree and returns a KaTeX string. `hit` is a span, or nothing.
 
-The hit node is the smallest node whose span contains the editor selection. A caret uses the same rule with an empty selection at the caret. A selection that covers two siblings uses their parent. A selection that sits in whitespace, in a comment, in a heading, or in a paragraph hits no math node. A selection inside `$...$` hits the expression between the dollars.
+The hit node is the smallest node whose span contains the editor selection. A caret is an empty selection. On a glyph, it hits the smallest node that contains that glyph. At the end of a statement, it hits the glyph on its left. On whitespace, it hits nothing, even when a parent span covers that space. A selection that covers two siblings uses their parent. A selection that sits in whitespace, in a comment, in a heading, or in a paragraph hits no math node. A selection inside `$...$` hits the expression between the dollars.
 
 When a node is the hit, the printer wraps that node's LaTeX and nothing else:
 

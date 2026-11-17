@@ -22,7 +22,7 @@ New code: `src/language/ast.ts`, `src/language/parse.ts`, `src/language/hit.ts`,
 
 Build the grammar in spec sections 4.1–4.3, including the two meanings of `[]`, trailing `\` continuation, and `//` comments. `#` is not a comment. Every node stores a span that covers its source text and not the surrounding whitespace.
 
-`toLatex(node, hit)` prints the pretty forms in spec section 4.4. A hit wraps only that node in `\htmlClass{regne-hit}{...}`. Every printed node carries `\htmlData{span=start:end}{...}`. `toLatex(node, null)` emits neither wrapper. Pretty-printing walks the tree. It does not rewrite a SymPy LaTeX string.
+`toLatex(node, hit)` prints the pretty forms in spec section 4.4. `hit` is the span of the hit node, or null. A hit wraps only that node in `\htmlClass{regne-hit}{...}`. Every printed node carries `\htmlData{span=start:end}{...}`, including when `hit` is null, so a click still has a span. `toLatex(node, null)` contains no `regne-hit`. Export, in phase 7, drops both wrappers. Pretty-printing walks the tree. It does not rewrite a SymPy LaTeX string.
 
 `hitNode(root, selection)` implements the caret, the exact node, the parent of two siblings, and "whitespace hits nothing."
 
