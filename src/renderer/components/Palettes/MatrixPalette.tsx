@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 import { useDocument } from '../../context/DocumentContext';
 
-export const MatrixPalette: React.FC = () => {
+export function matrixMatches(query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const words = ['matrix', 'identity', 'vector', 'rows', 'cols'];
+  return words.some((word) => word.startsWith(q) || q.startsWith(word));
+}
+
+export const MatrixPalette: React.FC<{ query?: string }> = ({ query = '' }) => {
   const { insertAtCursor } = useDocument();
   const [rows, setRows] = useState<number>(2);
   const [cols, setCols] = useState<number>(2);
+
+  if (query.trim() && !matrixMatches(query)) return null;
 
   const insertCustomMatrix = () => {
     const matrixRows: string[] = [];
@@ -49,6 +58,7 @@ export const MatrixPalette: React.FC = () => {
           </div>
         </div>
         <button
+          onMouseDown={(e) => e.preventDefault()}
           onClick={insertCustomMatrix}
           className="w-full py-1 bg-[var(--bg-surface)] hover:bg-[var(--border-color)] text-[var(--text-primary)] font-mono text-xs uppercase tracking-wider font-bold border border-[var(--border-color)] transition-colors text-center"
         >
@@ -58,6 +68,7 @@ export const MatrixPalette: React.FC = () => {
 
       <div className="grid grid-cols-2 gap-1 font-mono text-xs">
         <button
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => insertAtCursor('\\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}')}
           className="p-1.5 bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] border border-[var(--border-color)] text-center transition-colors font-mono"
           title="2x2 Identity Matrix"
@@ -65,6 +76,7 @@ export const MatrixPalette: React.FC = () => {
           I₂ (2×2)
         </button>
         <button
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => insertAtCursor('\\begin{pmatrix} 1 & 0 & 0 \\\\ 0 & 1 & 0 \\\\ 0 & 0 & 1 \\end{pmatrix}')}
           className="p-1.5 bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] border border-[var(--border-color)] text-center transition-colors font-mono"
           title="3x3 Identity Matrix"

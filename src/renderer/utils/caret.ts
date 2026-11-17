@@ -66,6 +66,22 @@ export const caretAtEnd = (el: HTMLElement): boolean => {
   return (frag.textContent || '').length === 0 && !frag.querySelector('br,img');
 };
 
+// Text-character offset of the caret inside `el`, or null when the caret is elsewhere.
+export const caretCharOffset = (el: HTMLElement): number | null => {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.startContainer)) return null;
+  const probe = document.createRange();
+  probe.selectNodeContents(el);
+  try {
+    probe.setEnd(range.startContainer, range.startOffset);
+  } catch {
+    return null;
+  }
+  return probe.toString().length;
+};
+
 // Place a collapsed caret `offset` text characters into `el`.
 export const placeCaretAtCharOffset = (el: HTMLElement, offset: number): void => {
   const sel = window.getSelection();

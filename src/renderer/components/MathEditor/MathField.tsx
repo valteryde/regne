@@ -275,6 +275,23 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
       };
 
       const handleKeyDown = (e: KeyboardEvent) => {
+        if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+          const key = e.key.toLowerCase();
+          if (key === 'b' || key === 'i' || key === 'u') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (key === 'b') {
+              mf.executeCommand(['applyStyle', { series: 'bold' }]);
+            } else if (key === 'i') {
+              mf.executeCommand(['applyStyle', { shape: 'italic' }]);
+            } else if (!mf.selectionIsCollapsed) {
+              mf.executeCommand(['insert', '\\underline{#@}']);
+            } else {
+              mf.executeCommand(['insert', '\\underline{#?}']);
+            }
+            return;
+          }
+        }
         if (e.key === 'Enter') {
           // If MathLive is in LaTeX input mode (e.g. user typed \delta and presses Enter to resolve it),
           // allow MathLive to handle Enter to complete the LaTeX command into the symbol atom first.
@@ -283,13 +300,11 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
           }
           e.preventDefault();
           e.stopPropagation();
-          if (e.metaKey || e.ctrlKey) {
+          if ((e.metaKey || e.ctrlKey) && !e.altKey) {
             if (onEvaluateInPlaceRef.current) onEvaluateInPlaceRef.current();
             else if (onEvaluateRef.current) onEvaluateRef.current();
-          } else if (e.shiftKey) {
-            if (onInsertBelowRef.current) onInsertBelowRef.current();
-          } else if (onEvaluateRef.current) {
-            onEvaluateRef.current();
+          } else if (onInsertBelowRef.current) {
+            onInsertBelowRef.current();
           }
         } else if (e.key === 'Backspace') {
           if (!mf.value || mf.value.trim() === '') {
@@ -350,7 +365,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
         return;
       }
 
-      // External change detected (Undo, Redo, Ribbon insert, or external clear)
+      const caret = mf.position;
       lastEmittedValueRef.current = value || '';
       if (mf.value !== value) {
         (mf as any).setValue(value || '', { suppressChangeNotifications: true });
@@ -362,7 +377,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
 
         if (isFocused) {
           try {
-            mf.executeCommand('moveToMathfieldEnd');
+            mf.position = Math.min(caret, mf.lastOffset);
           } catch {
             // ignore
           }
@@ -373,6 +388,7 @@ export const MathField = forwardRef<MathFieldHandle, MathFieldProps>(
     return (
       <math-field
         ref={mfRef}
+        placeholder={placeholder}
         style={{
           fontSize,
           color: color || (readOnly ? 'var(--math-output-color)' : 'var(--math-input-color)'),

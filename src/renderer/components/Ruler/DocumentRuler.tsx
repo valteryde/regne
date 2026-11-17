@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useDocument } from '../../context/DocumentContext';
+import { pageLeftInScroller } from '../../utils/pageGeometry';
 
 const DPI = 96; // Standard 96 CSS pixels per inch
 
@@ -18,24 +19,44 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
 
   const [draggingMarker, setDraggingMarker] = useState<'left' | 'right' | null>(null);
   const [hoveredMarker, setHoveredMarker] = useState<'left' | 'right' | null>(null);
-  const [scrollLeft, setScrollLeft] = useState<number>(0);
+  const [barLeft, setBarLeft] = useState<number>(0);
 
+  const rulerRootRef = useRef<HTMLDivElement>(null);
   const rulerBarRef = useRef<HTMLDivElement>(null);
   const dragStartXRef = useRef<number>(0);
   const dragStartMarginRef = useRef<number>(0);
 
-  // Sync ruler horizontal scroll with the document scroll container
+  // Keep the ruler on the same rectangle as the sheet, including zoom and scroll.
   useEffect(() => {
-    const target = scrollRef?.current;
-    if (!target) return;
+    const scroller = scrollRef?.current;
+    const root = rulerRootRef.current;
+    if (!scroller || !root) return;
 
-    const handleScroll = () => {
-      setScrollLeft(target.scrollLeft);
+    const sync = () => {
+      const pageW = paperWidth * DPI * zoom;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+      const leftInScroller = pageLeftInScroller(
+        scroller.scrollWidth,
+        scroller.clientWidth,
+        scroller.scrollLeft,
+        pageW,
+      );
+      setBarLeft(scrollerRect.left - rootRect.left + leftInScroller);
     };
 
-    target.addEventListener('scroll', handleScroll, { passive: true });
-    return () => target.removeEventListener('scroll', handleScroll);
-  }, [scrollRef]);
+    sync();
+    scroller.addEventListener('scroll', sync, { passive: true });
+    const observer = new ResizeObserver(sync);
+    observer.observe(scroller);
+    if (scroller.firstElementChild) observer.observe(scroller.firstElementChild);
+    window.addEventListener('resize', sync);
+    return () => {
+      scroller.removeEventListener('scroll', sync);
+      observer.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, [scrollRef, zoom, paperWidth, pageMargins.left, pageMargins.right]);
 
   const leftMarginPx = pageMargins.left * DPI;
   const rightMarginPx = pageMargins.right * DPI;
@@ -133,27 +154,20 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
 
   return (
     <div
-      className={`w-full select-none shrink-0 bg-[var(--bg-chrome)] border-[var(--border-color)] transition-colors relative z-20 overflow-visible flex items-center justify-center ${
-        isTop ? 'border-b shadow-[0_1px_2px_rgba(0,0,0,0.03)]' : 'border-t shadow-[0_-1px_2px_rgba(0,0,0,0.03)]'
+      ref={rulerRootRef}
+      className={`relative w-full select-none shrink-0 bg-[var(--bg-chrome)] border-[var(--border-color)] transition-colors z-20 overflow-hidden ${
+        isTop ? 'border-b' : 'border-t'
       }`}
       style={{ height: '20px' }}
       role="region"
-      aria-label="Document Margin & Tab Ruler"
+      aria-label="Document margin ruler"
     >
-      {/* Scroll-synced Ruler Track */}
-      <div
-        className="h-full flex items-center justify-center w-full overflow-x-clip overflow-y-visible"
-        style={{
-          transform: `translateX(${-scrollLeft}px)`,
-        }}
-      >
-        {/* Scaled Page Measurement Bar (matches document sheet width & zoom) */}
         <div
           ref={rulerBarRef}
-          className="relative h-full flex items-center shadow-xs border-x border-[#c9c5c9]"
+          className="absolute top-0 h-full border-x border-[#c9c5c9]"
           style={{
             width: `${totalWidthPx * zoom}px`,
-            transformOrigin: 'top center',
+            left: `${barLeft}px`,
           }}
         >
           {/* Inner Container filling ruler height */}
@@ -239,7 +253,7 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
                   draggingMarker === 'left' ? 'scale-125' : 'group-hover:scale-110'
                 }`}
               >
-                <svg width="8" height="6" viewBox="0 0 8 6" fill="none" className="drop-shadow-xs">
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
                   <path d="M4 6L0.5 0.5H7.5L4 6Z" fill="#242e84" />
                 </svg>
               </div>
@@ -256,7 +270,7 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
                 <div
                   className={`absolute left-1/2 -translate-x-1/2 ${
                     isTop ? 'top-full mt-1' : 'bottom-full mb-1'
-                  } px-1.5 py-0.5 bg-[#242e84] text-white text-[9.5px] font-mono rounded shadow-md pointer-events-none whitespace-nowrap z-50 animate-in fade-in zoom-in-95 duration-100`}
+                  } px-1.5 py-0.5 bg-[#242e84] text-white text-[9.5px] font-mono rounded pointer-events-none whitespace-nowrap z-50`}
                 >
                   Left: {pageMargins.left.toFixed(2)}"
                 </div>
@@ -283,7 +297,7 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
                   draggingMarker === 'right' ? 'scale-125' : 'group-hover:scale-110'
                 }`}
               >
-                <svg width="8" height="6" viewBox="0 0 8 6" fill="none" className="drop-shadow-xs">
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
                   <path d="M4 6L0.5 0.5H7.5L4 6Z" fill="#242e84" />
                 </svg>
               </div>
@@ -300,7 +314,7 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
                 <div
                   className={`absolute left-1/2 -translate-x-1/2 ${
                     isTop ? 'top-full mt-1' : 'bottom-full mb-1'
-                  } px-1.5 py-0.5 bg-[#242e84] text-white text-[9.5px] font-mono rounded shadow-md pointer-events-none whitespace-nowrap z-50 animate-in fade-in zoom-in-95 duration-100`}
+                  } px-1.5 py-0.5 bg-[#242e84] text-white text-[9.5px] font-mono rounded pointer-events-none whitespace-nowrap z-50`}
                 >
                   Right: {pageMargins.right.toFixed(2)}"
                 </div>
@@ -308,7 +322,6 @@ export const DocumentRuler: React.FC<DocumentRulerProps> = ({ scrollRef }) => {
             </div>
           </div>
         </div>
-      </div>
     </div>
   );
 };

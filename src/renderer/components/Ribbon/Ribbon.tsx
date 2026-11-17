@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDocument } from '../../context/DocumentContext';
-import { useEngine } from '../../context/EngineContext';
 import { RegneMascot } from '../Brand/RegneMascot';
 import { MainRibbon } from './MainRibbon';
 import { EquationRibbon } from './EquationRibbon';
@@ -44,17 +43,11 @@ export const Ribbon: React.FC<RibbonProps> = ({
 }) => {
   const {
     document: doc,
+    isDirty,
     newDocument,
     saveDocument,
     openDocument,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    evaluateAll,
   } = useDocument();
-
-  const { reset } = useEngine();
 
   const [activeTab, setActiveTab] = useState<RibbonTab>('main');
   const [isRibbonCollapsed, setIsRibbonCollapsed] = useState<boolean>(false);
@@ -85,8 +78,27 @@ export const Ribbon: React.FC<RibbonProps> = ({
     { id: 'review', shortLabel: 'REVIEW', fullLabel: 'REVIEW & SYNC' },
   ];
 
+  const chromeRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = chromeRef.current;
+    if (!root) return;
+    const apply = () => {
+      root.querySelectorAll<HTMLElement>('button, a, input, textarea').forEach((el) => {
+        el.tabIndex = -1;
+      });
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, { subtree: true, childList: true });
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <header className="flex flex-col select-none shrink-0 bg-white border-b border-[#e5e7eb] shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-colors relative z-30">
+    <header
+      ref={chromeRef}
+      data-chrome=""
+      className="flex flex-col select-none shrink-0 bg-white border-b border-[#e5e7eb] transition-colors relative z-30"
+    >
       {/* ========================================================================= */}
       {/* SINGLE UNIFIED TOP BAR: Brand, File Menu, Ribbon Tabs, Title & Controls  */}
       {/* ========================================================================= */}
@@ -165,50 +177,6 @@ export const Ribbon: React.FC<RibbonProps> = ({
                 </button>
                 <div className="h-px bg-slate-100 my-1" />
                 <button
-                  disabled={!canUndo}
-                  onClick={() => {
-                    undo();
-                    setOpenMenu(null);
-                  }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed text-left text-slate-700"
-                >
-                  <span>Undo</span>
-                  <span className="text-slate-400 text-[10px] font-mono">⌘Z</span>
-                </button>
-                <button
-                  disabled={!canRedo}
-                  onClick={() => {
-                    redo();
-                    setOpenMenu(null);
-                  }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed text-left text-slate-700"
-                >
-                  <span>Redo</span>
-                  <span className="text-slate-400 text-[10px] font-mono">⇧⌘Z</span>
-                </button>
-                <div className="h-px bg-slate-100 my-1" />
-                <button
-                  onClick={() => {
-                    evaluateAll();
-                    setOpenMenu(null);
-                  }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
-                >
-                  <span>Evaluate All Expressions</span>
-                  <span className="text-slate-400 text-[10px] font-mono">⇧⌘Enter</span>
-                </button>
-                <button
-                  onClick={() => {
-                    reset();
-                    setOpenMenu(null);
-                  }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
-                >
-                  <span>Restart Engine Session</span>
-                  <span className="text-slate-400 text-[10px] font-mono">restart;</span>
-                </button>
-                <div className="h-px bg-slate-100 my-1" />
-                <button
                   onClick={() => {
                     onOpenSettingsModal();
                     setOpenMenu(null);
@@ -234,8 +202,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => {
-                    if (activeTab === tab.id && !isRibbonCollapsed) {
-                      // Click active tab keeps it open
+                    if (activeTab === tab.id) {
+                      setIsRibbonCollapsed((open) => !open);
                     } else {
                       setActiveTab(tab.id);
                       setIsRibbonCollapsed(false);
@@ -256,11 +224,23 @@ export const Ribbon: React.FC<RibbonProps> = ({
           </nav>
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        <div className="flex-1 min-w-0 px-3 flex items-center justify-center">
+          <span className="truncate text-[11px] font-medium text-slate-500">
+            {doc.title?.trim() || 'Untitled'}
+            {isDirty ? ' — Unsaved' : ''}
+          </span>
+        </div>
 
-        {/* Right: Settings & Collapse */}
+        {/* Right: Sidebar, Settings & Collapse */}
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+            title={sidebarOpen ? 'Hide sidebar (Cmd+Shift+B)' : 'Show sidebar (Cmd+Shift+B)'}
+          >
+            <PanelLeft className="w-3.5 h-3.5" />
+          </button>
 
           <button
             type="button"

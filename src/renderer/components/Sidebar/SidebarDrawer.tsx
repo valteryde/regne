@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ListTree, Calculator, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavigatorDrawer } from '../Navigator/NavigatorDrawer';
 import { PaletteDrawer } from '../Palettes/PaletteDrawer';
@@ -18,11 +18,28 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
   onTabChange,
   onToggleCollapse,
 }) => {
+  const rootRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const apply = () => {
+      root.querySelectorAll<HTMLElement>('button, a, input, textarea').forEach((el) => {
+        el.tabIndex = -1;
+      });
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, { subtree: true, childList: true });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <aside
+      ref={rootRef}
+      data-chrome=""
       className={`${
-        isCollapsed ? 'w-11' : 'w-64'
-      } bg-[var(--bg-chrome)] border-r border-[var(--border-color)] border-l-2 border-l-[#242e84] flex flex-col shrink-0 select-none overflow-hidden h-full transition-all duration-200 ease-in-out`}
+        isCollapsed ? 'w-0 border-0' : 'w-64 border-r border-[var(--border-color)]'
+      } bg-[var(--bg-chrome)] flex flex-col shrink-0 select-none overflow-hidden h-full`}
     >
       {/* ========================================================================= */}
       {/* Top Header: Segmented Tabs + Collapse Button OR Centered Expand Button    */}
@@ -33,7 +50,7 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
             type="button"
             onClick={onToggleCollapse}
             className="p-1.5 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
-            title="Expand Left Bar (Cmd+B)"
+            title="Show sidebar (Cmd+Shift+B)"
           >
             <PanelLeftOpen className="w-4 h-4" />
           </button>
@@ -75,7 +92,7 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
             type="button"
             onClick={onToggleCollapse}
             className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer"
-            title="Collapse Left Bar (Cmd+B)"
+            title="Hide sidebar (Cmd+Shift+B)"
           >
             <PanelLeftClose className="w-3.5 h-3.5" />
           </button>

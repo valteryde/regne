@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { CommonSymbols } from './CommonSymbols';
-import { CalculusPalette } from './CalculusPalette';
-import { GreekPalette } from './GreekPalette';
-import { MatrixPalette } from './MatrixPalette';
+import { CommonSymbols, filterCommonSymbols } from './CommonSymbols';
+import { CalculusPalette, filterCalculus } from './CalculusPalette';
+import { GreekPalette, filterGreek } from './GreekPalette';
+import { MatrixPalette, matrixMatches } from './MatrixPalette';
 import {
   ChevronDown,
   ChevronRight,
@@ -64,6 +64,7 @@ export const PaletteDrawer: React.FC = () => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const query = searchTerm.trim();
   const algebraFunctions = [
     { label: 'expand', snippet: 'expand();' },
     { label: 'factor', snippet: 'factor();' },
@@ -101,52 +102,62 @@ export const PaletteDrawer: React.FC = () => {
 
       {/* Accordion container */}
       <div className="flex-1 overflow-y-auto bg-[var(--bg-chrome)]">
+        {filterCommonSymbols(query).length > 0 && (
         <PaletteSection
           title="Common Symbols"
           icon={<Sigma className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-          isOpen={openSections['symbols']}
+          isOpen={query ? true : openSections['symbols']}
           onToggle={() => toggleSection('symbols')}
         >
-          <CommonSymbols />
+          <CommonSymbols query={query} />
         </PaletteSection>
+        )}
 
+        {filterCalculus(query).length > 0 && (
         <PaletteSection
           title="Calculus & Analysis"
           icon={<Calculator className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-          isOpen={openSections['calculus']}
+          isOpen={query ? true : openSections['calculus']}
           onToggle={() => toggleSection('calculus')}
         >
-          <CalculusPalette />
+          <CalculusPalette query={query} />
         </PaletteSection>
+        )}
 
+        {filterGreek(query).length > 0 && (
         <PaletteSection
           title="Greek Alphabet"
           icon={<Pi className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-          isOpen={openSections['greek']}
+          isOpen={query ? true : openSections['greek']}
           onToggle={() => toggleSection('greek')}
         >
-          <GreekPalette />
+          <GreekPalette query={query} />
         </PaletteSection>
+        )}
 
+        {matrixMatches(query) && (
         <PaletteSection
           title="Matrices & Vectors"
           icon={<Grid3X3 className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-          isOpen={openSections['matrix']}
+          isOpen={query ? true : openSections['matrix']}
           onToggle={() => toggleSection('matrix')}
         >
-          <MatrixPalette />
+          <MatrixPalette query={query} />
         </PaletteSection>
+        )}
 
+        {algebraFunctions.some((fn) => !query || fn.label.toLowerCase().includes(query.toLowerCase()) || fn.snippet.toLowerCase().includes(query.toLowerCase())) && (
         <PaletteSection
           title="Standard CAS Commands"
           icon={<Calculator className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-          isOpen={openSections['algebra']}
+          isOpen={query ? true : openSections['algebra']}
           onToggle={() => toggleSection('algebra')}
         >
           <div className="grid grid-cols-2 gap-1 p-2 font-mono text-xs">
-            {algebraFunctions.map((fn, idx) => (
+            {algebraFunctions.filter((fn) => !query || fn.label.toLowerCase().includes(query.toLowerCase()) || fn.snippet.toLowerCase().includes(query.toLowerCase())).map((fn) => (
               <button
-                key={idx}
+                key={fn.label}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertAtCursor(fn.snippet)}
                 className="p-1.5 bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] border border-[var(--border-color)] text-left truncate transition-colors font-mono text-[11px]"
                 title={`Insert ${fn.snippet}`}
@@ -156,11 +167,12 @@ export const PaletteDrawer: React.FC = () => {
             ))}
           </div>
         </PaletteSection>
+        )}
       </div>
 
       {/* Footer hint */}
       <div className="p-2 border-t border-[var(--border-color)] bg-[var(--bg-chrome)] text-[11px] font-mono text-[var(--text-muted)] text-center">
-        Click items to insert into active prompt
+        Click a symbol to insert it on the active line
       </div>
     </div>
   );

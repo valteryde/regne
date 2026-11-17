@@ -26,14 +26,27 @@ const symbols: SymbolItem[] = [
   { label: 'cos', snippet: '\\cos\\left(#?\\right)', tooltip: 'Cosine' },
 ];
 
-export const CommonSymbols: React.FC = () => {
+export function filterCommonSymbols(query: string): SymbolItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return symbols;
+  return symbols.filter((item) =>
+    item.label.toLowerCase().includes(q) ||
+    item.tooltip.toLowerCase().includes(q) ||
+    item.snippet.toLowerCase().includes(q)
+  );
+}
+
+export const CommonSymbols: React.FC<{ query?: string }> = ({ query = '' }) => {
   const { insertAtCursor } = useDocument();
+  const items = filterCommonSymbols(query);
+  if (query.trim() && items.length === 0) return null;
 
   return (
     <div className="grid grid-cols-4 gap-1 p-2 bg-[var(--bg-surface)]">
-      {symbols.map((item, idx) => (
+      {items.map((item) => (
         <button
-          key={idx}
+          key={item.snippet}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => insertAtCursor(item.snippet)}
           className="h-7 flex items-center justify-center bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)] text-[var(--text-primary)] text-sm font-serif rounded-xs border border-[var(--border-color)] hover:border-[#242e84]/50 transition-colors select-none"
           title={item.tooltip}

@@ -637,89 +637,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </h4>
 
                   <div className="grid grid-cols-2 gap-1.5 text-xs">
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Toggle Text / Math</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        F5
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Evaluate Math Line</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Enter
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Evaluate In Place</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + Enter
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Insert Line Below</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Shift + Enter
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Heading 1 / 2 / 3</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + Alt + 1-3
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Promote / Demote Heading</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Shift + Tab / Tab
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Collapse / Expand Section</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + Enter
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Jump to Start / End</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + ↑ / ↓
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">New Document</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + N
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Save Document</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + S
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Open Document</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        Ctrl/Cmd + O
-                      </kbd>
-                    </div>
-
-                    <div className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between">
-                      <span className="text-[var(--text-secondary)] text-[11px]">Navigate Lines</span>
-                      <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium">
-                        ↑ / ↓
-                      </kbd>
-                    </div>
+                    {[
+                      ['New line type', 'F5'],
+                      ['Convert this line', 'Cmd+Shift+M'],
+                      ['New line', 'Enter'],
+                      ['Insert line below', 'Shift+Enter'],
+                      ['Evaluate formula', 'Cmd+Enter'],
+                      ['Collapse section', 'Cmd+Alt+Enter'],
+                      ['Heading level', 'Cmd+Alt+1–3'],
+                      ['Heading level on a title', 'Tab'],
+                      ['Next / previous line', 'Tab / Shift+Tab'],
+                      ['Bold / Italic / Underline', 'Cmd+B / I / U'],
+                      ['Hide sidebar', 'Cmd+Shift+B'],
+                      ['Palettes, when not typing', 'Cmd+P'],
+                      ['Outline', 'Cmd+Shift+O'],
+                      ['Insert math line', 'Cmd+Alt+M'],
+                      ['Jump to start / end', 'Cmd+↑ / ↓'],
+                      ['New / Open / Save', 'Cmd+N / O / S'],
+                    ].map(([label, keys]) => (
+                      <div
+                        key={label}
+                        className="p-2 rounded bg-[var(--bg-subtle)]/30 border border-[var(--border-color)] flex items-center justify-between gap-2"
+                      >
+                        <span className="text-[var(--text-secondary)] text-[11px]">{label}</span>
+                        <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded font-mono text-[10px] font-medium shrink-0">
+                          {keys}
+                        </kbd>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

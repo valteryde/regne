@@ -44,7 +44,7 @@ export const EquationRibbon: React.FC = () => {
   };
 
   return (
-    <div className="flex items-stretch h-14 px-2 select-none overflow-visible text-slate-700 bg-white">
+    <div className="ribbon-row px-2 select-none text-slate-700 bg-white">
       {/* ========================================================================= */}
       {/* 1. FRACTIONS & RADICALS                                                   */}
       {/* ========================================================================= */}

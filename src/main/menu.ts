@@ -117,7 +117,7 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
       submenu: [
         {
           label: 'Math Line',
-          accelerator: 'CmdOrCtrl+M',
+          accelerator: 'CmdOrCtrl+Alt+M',
           click: () => sendCommand('insert-math'),
         },
         {
@@ -151,7 +151,7 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
       submenu: [
         {
           label: 'Toggle Left Bar',
-          accelerator: 'CmdOrCtrl+B',
+          accelerator: 'CmdOrCtrl+Shift+B',
           click: () => sendCommand('toggle-sidebar'),
         },
         { type: 'separator' },

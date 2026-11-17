@@ -32,14 +32,23 @@ const greekLetters: GreekLetter[] = [
   { char: 'Ω', latex: '\\Omega ' },
 ];
 
-export const GreekPalette: React.FC = () => {
+export function filterGreek(query: string): GreekLetter[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return greekLetters;
+  return greekLetters.filter((g) => g.char.includes(q) || g.latex.toLowerCase().includes(q));
+}
+
+export const GreekPalette: React.FC<{ query?: string }> = ({ query = '' }) => {
   const { insertAtCursor } = useDocument();
+  const letters = filterGreek(query);
+  if (query.trim() && letters.length === 0) return null;
 
   return (
     <div className="grid grid-cols-4 gap-1 p-2 bg-[var(--bg-surface)]">
-      {greekLetters.map((g, idx) => (
+      {letters.map((g) => (
         <button
-          key={idx}
+          key={g.latex}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => insertAtCursor(g.latex)}
           className="h-7 flex items-center justify-center bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)] text-[var(--text-primary)] text-sm font-serif rounded-xs border border-[var(--border-color)] hover:border-[#242e84]/50 transition-colors select-none"
           title={g.latex.trim()}

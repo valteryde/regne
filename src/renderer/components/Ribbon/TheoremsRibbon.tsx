@@ -11,7 +11,7 @@ export const TheoremsRibbon: React.FC = () => {
   };
 
   return (
-    <div className="flex items-stretch h-14 px-2 select-none overflow-visible text-slate-700 bg-white">
+    <div className="ribbon-row px-2 select-none text-slate-700 bg-white">
       {/* 1. THEOREMS & LEMMAS */}
       <div className="flex flex-col justify-between px-2 py-1 shrink-0">
         <div className="flex items-center gap-1 justify-center flex-1">

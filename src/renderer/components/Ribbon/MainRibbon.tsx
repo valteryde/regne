@@ -21,13 +21,13 @@ export const MainRibbon: React.FC = () => {
     mode,
     setMode,
     activeElementId,
-    convertElementType,
     insertElement,
     insertSection,
     insertAtCursor,
     updateElement,
     evaluateMath,
     evaluateAll,
+    convertActiveLine,
     undo,
     redo,
     canUndo,
@@ -167,6 +167,10 @@ export const MainRibbon: React.FC = () => {
         activeMathField.executeCommand(['applyStyle', { series: 'bold' }]);
       } else if (cmd === 'italic') {
         activeMathField.executeCommand(['applyStyle', { shape: 'italic' }]);
+      } else if (activeMathField.selectionIsCollapsed) {
+        activeMathField.executeCommand(['insert', '\\underline{#?}']);
+      } else {
+        activeMathField.executeCommand(['insert', '\\underline{#@}']);
       }
       try {
         activeMathField.focus({ preventScroll: true });
@@ -185,28 +189,23 @@ export const MainRibbon: React.FC = () => {
   };
 
   return (
-    <div className="flex items-stretch h-14 px-2 select-none overflow-visible text-slate-700 bg-white">
+    <div className="ribbon-row px-2 select-none text-slate-700 bg-white">
       {/* ========================================================================= */}
       {/* 1. AUTHORING MODE (Math vs Text)                                         */}
       {/* ========================================================================= */}
       <div className="flex flex-col justify-between px-2 py-1 shrink-0">
         <div className="flex items-center justify-center flex-1">
-          <div className="inline-flex h-7 bg-white rounded-[3px] border border-slate-200 overflow-hidden text-xs items-center shadow-2xs">
+          <div className="inline-flex h-7 bg-white rounded-[3px] border border-slate-200 overflow-hidden text-xs items-center">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                setMode('text');
-                if (activeElementId) {
-                  convertElementType(activeElementId, 'text');
-                }
-              }}
+              onClick={() => setMode('text')}
               className={`h-full px-3 flex items-center gap-1.5 transition-colors cursor-pointer ${
                 mode === 'text'
-                  ? 'bg-[#242e84] text-white font-semibold shadow-inner'
+                  ? 'bg-[#242e84] text-white font-semibold'
                   : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
               }`}
-              title="Switch to Text Mode (F5)"
+              title="New lines are text (F5). Does not rewrite the current line."
             >
               <Type className="w-3.5 h-3.5" />
               <span>Text</span>
@@ -215,18 +214,13 @@ export const MainRibbon: React.FC = () => {
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                setMode('math');
-                if (activeElementId) {
-                  convertElementType(activeElementId, 'math');
-                }
-              }}
+              onClick={() => setMode('math')}
               className={`h-full px-3 flex items-center gap-1.5 transition-colors cursor-pointer ${
                 mode === 'math'
-                  ? 'bg-[#242e84] text-white font-semibold shadow-inner'
+                  ? 'bg-[#242e84] text-white font-semibold'
                   : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
               }`}
-              title="Switch to Math Mode (F5)"
+              title="New lines are math (F5). Does not rewrite the current line."
             >
               <span className="font-serif italic font-semibold">f(x)</span>
               <span>Math</span>
@@ -234,9 +228,20 @@ export const MainRibbon: React.FC = () => {
           </div>
         </div>
         <div className="text-[9px] font-bold text-slate-400 tracking-wider text-center uppercase select-none">
-          Mode
+          New line
         </div>
       </div>
+
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={convertActiveLine}
+        disabled={!activeElementId}
+        className="self-center h-7 px-2 text-xs font-semibold bg-slate-50 hover:bg-slate-100 disabled:opacity-40 rounded border border-slate-200 cursor-pointer text-slate-700"
+        title="Convert the current line between text and math (Cmd+Shift+M)"
+      >
+        Convert line
+      </button>
 
       <div className="h-8 w-px bg-slate-200 shrink-0 self-center mx-1" />
 
@@ -618,7 +623,7 @@ export const MainRibbon: React.FC = () => {
             }}
             disabled={!activeElementId || isAnyEvaluating}
             className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold bg-[#242e84] text-white hover:bg-[#1a226b] disabled:opacity-50 rounded-[2px] transition-colors cursor-pointer shadow-2xs"
-            title="Evaluate currently active math expression (Enter)"
+            title="Evaluate the current formula in place (Cmd+Enter)"
           >
             <Play className="w-3 h-3 fill-current" />
             <span>Evaluate</span>

@@ -55,14 +55,27 @@ const templates: CalcTemplate[] = [
   },
 ];
 
-export const CalculusPalette: React.FC = () => {
+export function filterCalculus(query: string): CalcTemplate[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return templates;
+  return templates.filter((tpl) =>
+    tpl.name.toLowerCase().includes(q) ||
+    tpl.display.toLowerCase().includes(q) ||
+    tpl.snippet.toLowerCase().includes(q)
+  );
+}
+
+export const CalculusPalette: React.FC<{ query?: string }> = ({ query = '' }) => {
   const { insertAtCursor } = useDocument();
+  const items = filterCalculus(query);
+  if (query.trim() && items.length === 0) return null;
 
   return (
     <div className="grid grid-cols-2 gap-1.5 p-2 bg-[var(--bg-surface)]">
-      {templates.map((tpl, idx) => (
+      {items.map((tpl) => (
         <button
-          key={idx}
+          key={tpl.name}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => insertAtCursor(tpl.snippet)}
           className="h-7 px-2 flex items-center justify-center bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)] text-[var(--text-primary)] text-xs font-serif rounded-xs border border-[var(--border-color)] hover:border-[#242e84]/50 transition-colors truncate select-none"
           title={`Insert ${tpl.name}`}

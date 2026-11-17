@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { ChevronDown, ChevronRight, Hash, Bookmark, BookOpen, MoreHorizontal } from 'lucide-react';
 import { SectionKind } from '../../../types/document';
-import { caretAtStart, caretAtEnd } from '../../utils/caret';
+import { caretAtStart, caretAtEnd, caretCharOffset, placeCaretAtCharOffset } from '../../utils/caret';
 
 interface SectionLineProps {
   id: string;
@@ -20,9 +20,11 @@ interface SectionLineProps {
   onToggleCollapse: () => void;
   onEnter: () => void;
   onBackspaceEmpty: () => void;
+  onBackspaceAtStart: () => void;
   onNavigateUp: () => void;
   onNavigateDown: () => void;
   onRowMouseDown: (e: React.MouseEvent) => void;
+  ignoreClick?: () => boolean;
   registerRef: (el: HTMLDivElement | null) => void;
 }
 
@@ -43,9 +45,11 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
   onToggleCollapse,
   onEnter,
   onBackspaceEmpty,
+  onBackspaceAtStart,
   onNavigateUp,
   onNavigateDown,
   onRowMouseDown,
+  ignoreClick,
   registerRef,
 }) => {
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -58,21 +62,12 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
     if (title === lastEmittedTitleRef.current && elRef.current.innerText === title) {
       return;
     }
+    const focused = document.activeElement === elRef.current;
+    const offset = focused ? caretCharOffset(elRef.current) : null;
     lastEmittedTitleRef.current = title || '';
     if (elRef.current.innerText !== title) {
       elRef.current.innerText = title || '';
-      if (document.activeElement === elRef.current) {
-        try {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(elRef.current);
-          range.collapse(false);
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        } catch {
-          // ignore
-        }
-      }
+      if (focused && offset !== null) placeCaretAtCharOffset(elRef.current, offset);
     }
   }, [title]);
 
@@ -91,18 +86,24 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
     <div
       data-element-id={id}
       data-element-idx={index}
-      className={`group/sec relative py-0.5 px-1 transition-colors select-text ${
-        isSelected ? 'bg-[var(--selection-bg)] maple-selected' : 'bg-transparent'
+      className={`group/sec relative py-0.5 pr-1 transition-colors select-text border-l-2 ${
+        isSelected
+          ? 'bg-[var(--selection-bg)] maple-selected border-l-transparent'
+          : isActive
+          ? 'bg-[#242e84]/[0.05] border-l-[#242e84]'
+          : 'bg-transparent border-l-transparent'
       }`}
       onMouseDown={onRowMouseDown}
-      onClick={() => {
-        if (!isSelected) {
-          onFocus();
-          try {
-            elRef.current?.focus({ preventScroll: true });
-          } catch {
-            elRef.current?.focus();
-          }
+      onClick={(e) => {
+        if (ignoreClick?.()) return;
+        onFocus();
+        const node = e.target as Node;
+        const hit = node instanceof Element ? node : node.parentElement;
+        if (hit?.closest('[contenteditable="true"], button')) return;
+        try {
+          elRef.current?.focus({ preventScroll: true });
+        } catch {
+          elRef.current?.focus();
         }
       }}
     >
@@ -123,6 +124,7 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
         <button
           type="button"
           tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleCollapse();
@@ -142,6 +144,7 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
           <button
             type="button"
             tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.stopPropagation();
               setShowTypeMenu((v) => !v);
@@ -242,10 +245,10 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
             onChangeTitle(text);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.altKey) {
               e.preventDefault();
               onToggleCollapse();
-            } else if (e.key === 'Enter' && !e.shiftKey) {
+            } else if (e.key === 'Enter' && !(e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               onEnter();
             } else if (e.key === 'Tab') {
@@ -262,7 +265,7 @@ export const SectionLine: React.FC<SectionLineProps> = memo(({
                 onBackspaceEmpty();
               } else if (caretAtStart(e.currentTarget)) {
                 e.preventDefault();
-                onNavigateUp();
+                onBackspaceAtStart();
               }
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();

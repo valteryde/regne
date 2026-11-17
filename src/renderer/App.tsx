@@ -19,18 +19,23 @@ const MainLayout: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const documentScrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Keyboard shortcut: Cmd+, or Ctrl+, opens Settings
-  // Cmd+B / Ctrl+B toggles sidebar collapse/expand
-  // Cmd+Shift+O opens/toggles Outline
-  // Cmd+P / Ctrl+P opens/toggles Palettes
+  // Keyboard shortcut: Cmd+, or Ctrl+, opens Settings.
+  // Cmd+Shift+B toggles the sidebar from the native menu.
+  // Cmd+Shift+O opens the outline. Cmd+P opens palettes when not typing.
+  // Cmd+B / Cmd+I / Cmd+U format the selection.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === 'MATH-FIELD' ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         setIsSettingsOpen(true);
-      } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        setIsSidebarCollapsed((prev) => !prev);
       } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         setIsSidebarCollapsed((prev) => {
@@ -45,6 +50,7 @@ const MainLayout: React.FC = () => {
           return true;
         });
       } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        if (typing) return;
         e.preventDefault();
         setIsSidebarCollapsed((prev) => {
           if (prev) {
