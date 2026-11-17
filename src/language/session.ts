@@ -11,14 +11,6 @@ export interface RunnableStatement {
   ir: Ir;
 }
 
-export interface PageRow {
-  kind: "gap" | "raw" | "display";
-  start: number;
-  /** Raw heading or paragraph, markers included. Empty for a gap or a display. */
-  text: string;
-  display: StatementDisplay | null;
-}
-
 export interface Pause {
   push(run: () => void): void;
   cancel(): void;
@@ -57,41 +49,6 @@ export function runnableStatements(blocks: Block[]): RunnableStatement[] {
     statements.push({ source: block.source, ir: lowerStatement(block.parsed.node) });
   }
   return statements;
-}
-
-/**
- * One row per block the page shows.
- * A heading or a paragraph is its raw source, marker included.
- * A bare line is a display, never prose.
- */
-export function pageRows(source: string, displays: StatementDisplay[]): PageRow[] {
-  const document = readDocument(source);
-  if (document.legacy) return [];
-  const byStart = new Map(displays.map((display) => [display.start, display]));
-  const rows: PageRow[] = [];
-  for (const block of document.blocks) {
-    if (block.kind === "comment") continue;
-    if (block.kind === "blank") {
-      rows.push({ kind: "gap", start: block.span.start, text: "", display: null });
-      continue;
-    }
-    if (block.kind === "heading" || block.kind === "paragraph") {
-      rows.push({
-        kind: "raw",
-        start: block.span.start,
-        text: source.slice(block.span.start, block.span.end),
-        display: null,
-      });
-      continue;
-    }
-    rows.push({
-      kind: "display",
-      start: block.span.start,
-      text: "",
-      display: byStart.get(block.span.start) ?? null,
-    });
-  }
-  return rows;
 }
 
 export function paint(source: string, values: FreshValue[], previous: StatementDisplay[]): StatementDisplay[] {

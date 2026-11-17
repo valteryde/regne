@@ -10,10 +10,10 @@ import {
   cachedValues,
   createPause,
   paint,
-  runnableStatements,
   storeValues,
 } from "../../../language/session";
 import { Span } from "../../../language/ast";
+import { evaluationPlan } from "../../../language/page";
 import {
   PointerTarget,
   paintSelection,
@@ -60,6 +60,12 @@ function suggestedName(text: string): string {
   const title = heading && heading.kind === "heading" ? heading.title.trim() : "";
   const slug = title.replace(/[^\w]+/g, "_").replace(/^_|_$/g, "");
   return `${slug || "Untitled"}.regne`;
+}
+
+function sameSpan(left: Span | null, right: Span | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.start === right.start && left.end === right.end;
 }
 
 function selectionOf(codeEditor: editor.IStandaloneCodeEditor): Span | null {
@@ -109,6 +115,8 @@ export const SourcePage: React.FC = () => {
   const [path, setPath] = useState<string | null>(pathRef.current);
   const [dirty, setDirty] = useState(false);
   const [displays, setDisplays] = useState<StatementDisplay[]>([]);
+  const [selection, setSelection] = useState<Span | null>(null);
+  const [inlineValues, setInlineValues] = useState<ReadonlyMap<number, FreshValue>>(new Map());
   const [legacy, setLegacy] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
@@ -131,14 +139,15 @@ export const SourcePage: React.FC = () => {
       setPending(false);
       displaysRef.current = [];
       setDisplays([]);
+      setInlineValues(new Map());
       return;
     }
-    const runnable = runnableStatements(document.blocks);
-    const sources = runnable.map((item) => item.source);
+    const plan = evaluationPlan(document.blocks);
+    const sources = plan.map((item) => item.source);
     let values = cachedValues(sources, cacheRef.current);
     if (!values) {
       try {
-        values = await evaluateIr(runnable.map((item) => item.ir));
+        values = await evaluateIr(plan.map((item) => item.ir));
         if (!alive.current || token !== generation.current) return;
         storeValues(sources, values, cacheRef.current);
         setEngineError(null);
@@ -150,8 +159,14 @@ export const SourcePage: React.FC = () => {
       }
     }
     if (!alive.current || token !== generation.current) return;
-    const next = paintSelection(text, paint(text, values ?? [], displaysRef.current), selectionRef.current);
+    const statementValues = (values ?? []).filter((_, index) => plan[index]?.role === "statement");
+    const inlines = new Map<number, FreshValue>();
+    plan.forEach((item, index) => {
+      if (item.role === "inline" && values?.[index]) inlines.set(item.key, values[index]);
+    });
+    const next = paintSelection(text, paint(text, statementValues, displaysRef.current), selectionRef.current);
     displaysRef.current = next;
+    setInlineValues(inlines);
     setLegacy(false);
     setPending(false);
     setDisplays(next);
@@ -268,6 +283,7 @@ export const SourcePage: React.FC = () => {
     const paintEditorSelection = () => {
       const span = selectionOf(codeEditor);
       selectionRef.current = span;
+      setSelection((prev) => (sameSpan(prev, span) ? prev : span));
       const next = paintSelection(sourceRef.current, displaysRef.current, span);
       if (next === displaysRef.current) return;
       displaysRef.current = next;
@@ -404,6 +420,8 @@ export const SourcePage: React.FC = () => {
           zoom={zoom}
           marginLeft={pageMargins.left}
           marginRight={pageMargins.right}
+          selection={selection}
+          inlineValues={inlineValues}
           onMouseDown={() => editorRef.current?.focus()}
           onPointerDown={beginPointer}
         />

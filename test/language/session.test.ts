@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { CYLINDER_NOTE } from "../../src/language/document";
+import { CYLINDER_NOTE, readDocument } from "../../src/language/document";
 import { FreshValue } from "../../src/language/displays";
+import { pageDocument } from "../../src/language/page";
 import {
   RECOMPUTE_PAUSE_MS,
   cacheKey,
@@ -9,12 +10,10 @@ import {
   createPause,
   brokenLineNumbers,
   lineNumberAt,
-  pageRows,
   paint,
   runnableStatements,
   storeValues,
 } from "../../src/language/session";
-import { readDocument } from "../../src/language/document";
 
 const TEMPERATURE: FreshValue = { latex: "3969.21\\,\\mathrm{K}", kind: "quantity" };
 
@@ -30,13 +29,11 @@ function fiveValues(): FreshValue[] {
 
 describe("the page", () => {
   test("the cylinder note is five displays, and a bare line is never prose", () => {
-    const rows = pageRows(CYLINDER_NOTE, paint(CYLINDER_NOTE, fiveValues(), []));
+    const rows = pageDocument(CYLINDER_NOTE, paint(CYLINDER_NOTE, fiveValues(), []), null);
     const displays = rows.filter((row) => row.kind === "display");
     assert.equal(displays.length, 5);
     assert.equal(displays[4].display?.valueLatex, TEMPERATURE.latex);
-    assert.equal(rows.some((row) => row.kind === "raw" && row.text.startsWith("# ")), true);
-    assert.equal(rows.some((row) => row.kind === "raw" && row.text.startsWith("- ")), true);
-    const bare = pageRows("2 + 2\n", []);
+    const bare = pageDocument("2 + 2\n", [], null);
     assert.deepEqual(bare.map((row) => row.kind), ["display"]);
   });
 

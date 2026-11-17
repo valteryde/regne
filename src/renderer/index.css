@@ -128,6 +128,19 @@ math-field::part(menu-toggle) {
   color: var(--text-primary);
 }
 
+.regne-inline .katex {
+  font-size: 1.05em;
+}
+
+.regne-inline-value {
+  margin-left: 0.35em;
+}
+
+.regne-inline-value .katex {
+  color: var(--maple-blue);
+  font-size: 1.05em;
+}
+
 [data-regne-page] .katex-display {
   text-align: left;
 }
