@@ -107,7 +107,7 @@ export const UpdateNotification: React.FC = () => {
     return (
       <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
         <div className="flex items-center gap-2.5 px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-lg text-xs text-[var(--text-secondary)]">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#242e84]" />
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[var(--icon-steel)]" />
           <span>Checking for updates...</span>
         </div>
       </div>
@@ -138,9 +138,7 @@ export const UpdateNotification: React.FC = () => {
       <div className="fixed bottom-4 right-4 z-50 w-84 max-w-[calc(100vw-2rem)] animate-in fade-in slide-in-from-bottom-2 duration-200">
         <div className="bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg shadow-xl overflow-hidden">
           <div className="p-3.5 flex items-start gap-3">
-            <div className="p-2 bg-blue-50 dark:bg-blue-950/40 rounded-lg text-[#242e84] shrink-0">
-              <ArrowDownToLine className="w-4 h-4" />
-            </div>
+            <ArrowDownToLine className="w-4 h-4 text-[var(--icon-steel)] shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
                 <h4 className="text-xs font-semibold text-[var(--text-primary)] truncate">
@@ -160,7 +158,7 @@ export const UpdateNotification: React.FC = () => {
               <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={handleDownload}
-                  className="flex-1 px-3 py-1.5 bg-[#242e84] hover:bg-[#1a2266] text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download Update</span>
@@ -191,12 +189,12 @@ export const UpdateNotification: React.FC = () => {
         <div className="bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg shadow-xl p-3.5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Download className="w-4 h-4 text-[#242e84] animate-pulse" />
+              <Download className="w-4 h-4 text-[var(--icon-steel)] animate-pulse" />
               <span className="text-xs font-semibold text-[var(--text-primary)]">
                 Downloading Regne v{updaterState.info?.version || ''}
               </span>
             </div>
-            <span className="text-xs font-mono font-medium text-[#242e84]">
+            <span className="text-xs font-mono font-medium text-[var(--icon-steel)]">
               {Math.round(percent)}%
             </span>
           </div>
@@ -204,7 +202,7 @@ export const UpdateNotification: React.FC = () => {
           {/* Progress Bar Track */}
           <div className="w-full h-2 bg-[var(--bg-subtle)] rounded-full overflow-hidden relative mb-2">
             <div
-              className="h-full bg-[#242e84] rounded-full transition-all duration-300 ease-out"
+              className="h-full bg-[var(--icon-steel)] rounded-full transition-all duration-300 ease-out"
               style={{ width: `${percent}%` }}
             />
           </div>

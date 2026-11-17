@@ -95,7 +95,7 @@ export const Sheet: React.FC<SheetProps> = ({
         <div className="relative overflow-hidden" style={{ width: fittedWidth, height: fittedHeight }}>
           <article
             ref={articleRef}
-            className="absolute top-0 left-0 bg-white border border-[var(--border-color)] text-[var(--text-primary)]"
+            className="absolute top-0 left-0 bg-white border border-[var(--border-color)] text-[var(--page-ink)]"
             style={{
               width,
               minHeight: "11in",
@@ -108,7 +108,7 @@ export const Sheet: React.FC<SheetProps> = ({
             }}
           >
             {notice && (
-              <p data-regne-import className="font-serif text-sm mb-4 text-[var(--text-muted)]">
+              <p data-regne-import className="font-serif text-sm mb-4 text-[var(--page-muted)]">
                 {notice}
               </p>
             )}
@@ -123,7 +123,7 @@ export const Sheet: React.FC<SheetProps> = ({
               </p>
             )}
             {pending && blocks.length === 0 && !legacy && (
-              <p className="text-sm text-[var(--text-muted)]">Computing…</p>
+              <p className="text-sm text-[var(--page-muted)]">Computing…</p>
             )}
             {blocks.map((block) => (
               <BlockView key={`${block.kind}-${block.start}`} block={block} />
@@ -149,7 +149,7 @@ const BlockView: React.FC<{ block: PageBlock }> = ({ block }) => {
         data-regne-start={block.start}
         data-regne-end={block.end}
         data-regne-caret={block.caret}
-        className={`font-serif ${size} leading-tight text-[var(--text-primary)] mt-2 mb-3`}
+        className={`font-serif ${size} leading-tight mt-2 mb-3`}
       >
         {block.title}
       </Tag>

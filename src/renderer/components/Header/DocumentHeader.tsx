@@ -30,7 +30,7 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
   const broken = label?.broken ?? 0;
 
   return (
-    <header className="relative z-20 flex items-center h-10 px-3 gap-5 border-b border-[var(--border-color)] bg-[var(--bg-canvas)] shrink-0">
+    <header className="relative z-20 flex items-center h-10 px-3 gap-5 border-b border-[var(--border-color)] bg-[var(--bg-chrome)] shrink-0">
       <div className="flex items-center gap-2 min-w-0">
         <img src={iconUrl} alt="" className="w-[18px] h-[18px] shrink-0 select-none" />
         <span className="text-[13px] truncate" title={title}>
@@ -47,29 +47,29 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
 
       <nav className="flex items-center gap-3 min-w-0" aria-label="Document">
         <div className="flex items-center">
-          <HeaderButton label="New" onClick={() => dispatchSourceCommand('new')}>
+          <HeaderButton tone="brass" label="New" onClick={() => dispatchSourceCommand('new')}>
             <FilePlus />
           </HeaderButton>
-          <HeaderButton label="Open" onClick={() => dispatchSourceCommand('open')}>
+          <HeaderButton tone="brass" label="Open" onClick={() => dispatchSourceCommand('open')}>
             <FolderOpen />
           </HeaderButton>
-          <HeaderButton label="Save" mark={label?.dirty} onClick={() => dispatchSourceCommand('save')}>
+          <HeaderButton tone="brass" label="Save" mark={label?.dirty} onClick={() => dispatchSourceCommand('save')}>
             <Save />
           </HeaderButton>
         </div>
         <div className="flex items-center">
-          <HeaderButton label="Undo" onClick={() => dispatchSourceCommand('undo')}>
+          <HeaderButton tone="clay" label="Undo" onClick={() => dispatchSourceCommand('undo')}>
             <Undo2 />
           </HeaderButton>
-          <HeaderButton label="Redo" onClick={() => dispatchSourceCommand('redo')}>
+          <HeaderButton tone="clay" label="Redo" onClick={() => dispatchSourceCommand('redo')}>
             <Redo2 />
           </HeaderButton>
         </div>
         <div className="flex items-center">
-          <HeaderButton label="Export LaTeX" onClick={() => dispatchSourceCommand('export')}>
+          <HeaderButton tone="steel" label="Export LaTeX" onClick={() => dispatchSourceCommand('export')}>
             <FileText />
           </HeaderButton>
-          <HeaderButton label="Export HTML" onClick={() => dispatchSourceCommand('export-html')}>
+          <HeaderButton tone="steel" label="Export HTML" onClick={() => dispatchSourceCommand('export-html')}>
             <FileCode />
           </HeaderButton>
         </div>
@@ -78,7 +78,7 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
 
       <div className="ml-auto flex items-center gap-1 shrink-0">
         <PowerStatus computing={computing} broken={broken} />
-        <HeaderButton label="Settings" onClick={onOpenSettings}>
+        <HeaderButton tone="clay" label="Settings" onClick={onOpenSettings}>
           <Settings />
         </HeaderButton>
       </div>
@@ -91,14 +91,21 @@ function HeaderButton({
   onClick,
   mark,
   pressed,
+  tone = 'clay',
   children,
 }: {
   label: string;
   onClick: () => void;
   mark?: boolean;
   pressed?: boolean;
+  tone?: 'brass' | 'clay' | 'steel';
   children: React.ReactNode;
 }) {
+  const toneClass = {
+    brass: 'text-[var(--icon-brass)]',
+    clay: 'text-[var(--icon-clay)]',
+    steel: 'text-[var(--icon-steel)]',
+  }[tone];
   return (
     <button
       type="button"
@@ -107,7 +114,7 @@ function HeaderButton({
       aria-pressed={pressed}
       onClick={onClick}
       className={`inline-flex items-center justify-center w-7 h-7 [&_svg]:w-4 [&_svg]:h-4 [&_svg]:stroke-[1.5] ${
-        mark ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+        mark || pressed ? 'text-[var(--text-primary)]' : `${toneClass} hover:text-[var(--text-primary)]`
       }`}
     >
       {children}
@@ -137,7 +144,7 @@ function SectionsMenu({ headings }: { headings: SourceLabel['headings'] }) {
 
   return (
     <div className="relative" ref={rootRef}>
-      <HeaderButton label="Sections" pressed={open} onClick={() => setOpen((value) => !value)}>
+      <HeaderButton tone="clay" label="Sections" pressed={open} onClick={() => setOpen((value) => !value)}>
         <ListTree />
       </HeaderButton>
       {open && (
@@ -173,8 +180,9 @@ function SectionsMenu({ headings }: { headings: SourceLabel['headings'] }) {
 function PowerStatus({ computing, broken }: { computing: boolean; broken: number }) {
   const text = computing ? 'Computing' : broken === 1 ? '1 line' : broken > 1 ? `${broken} lines` : 'Ready';
   const brokenPage = !computing && broken > 0;
-  const className =
-    'inline-flex items-center gap-1.5 h-7 px-1.5 text-[12px] text-[var(--text-muted)] [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:stroke-[1.5]';
+  const className = `inline-flex items-center gap-1.5 h-7 px-1.5 text-[12px] [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:stroke-[1.5] ${
+    brokenPage ? 'text-[var(--icon-clay)]' : 'text-[var(--icon-steel)]'
+  }`;
 
   const body = (
     <>

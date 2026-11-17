@@ -3,24 +3,39 @@
 
 /* Dynamic theme styling variables — Engineering Workstation Palette */
 :root {
-  --bg-canvas: #faf8f5;
-  --bg-chrome: #f3f4f6;
-  --bg-surface: #ffffff;
-  --bg-subtle: #e5e7eb;
-  --border-color: #d1d5db;
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
-  --math-input-color: #7f1d1d;
-  --math-output-color: #0000bb;
+  --bg-canvas: #100f0e;
+  --bg-chrome: #171614;
+  --bg-surface: #171614;
+  --bg-subtle: #24211e;
+  --border-color: #2c2926;
+  --text-primary: #e6e2d8;
+  --text-secondary: #b7b1a6;
+  --text-muted: #8f8a82;
+  --math-input-color: #1c1915;
+  --math-output-color: #3d5c78;
   --maple-blue: var(--math-output-color);
-  --selection-bg: #b4d5fe;
+  --selection-bg: #3a342c;
+  --page-ink: #1c1915;
+  --page-muted: #5e574e;
+  --page-hit: #e4dcc8;
+  --icon-brass: #e0b15c;
+  --icon-clay: #d9896a;
+  --icon-steel: #8aa3c4;
+  --accent: #3d5c78;
+  --accent-hover: #314c64;
+  color-scheme: dark;
 }
 
 /* Global Selection Styling */
 ::selection {
   background-color: var(--selection-bg) !important;
-  color: inherit !important;
+  color: var(--text-primary) !important;
+}
+
+[data-regne-page] ::selection,
+[data-regne-page]::selection {
+  background-color: var(--page-hit) !important;
+  color: var(--page-ink) !important;
 }
 
 math-field {
@@ -125,7 +140,7 @@ math-field::part(menu-toggle) {
 
 .regne-input .katex,
 .regne-input .katex-display {
-  color: var(--text-primary);
+  color: var(--page-ink);
 }
 
 .regne-inline .katex {
@@ -146,11 +161,11 @@ math-field::part(menu-toggle) {
 }
 
 .regne-broken-line {
-  background-color: #fde8e8;
+  background-color: #3a2a28;
 }
 
 .regne-hit {
-  background-color: var(--selection-bg);
+  background-color: var(--page-hit);
 }
 
 .regne-placeholder:empty::before {

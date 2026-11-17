@@ -179,7 +179,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]/50 hover:text-[var(--text-primary)]'
               }`}
             >
-              <Cpu className="w-3.5 h-3.5 text-[#242e84]" />
+              <Cpu className="w-3.5 h-3.5 text-[var(--icon-steel)]" />
               <span>CAS Engine</span>
             </button>
 
@@ -191,7 +191,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]/50 hover:text-[var(--text-primary)]'
               }`}
             >
-              <Ruler className="w-3.5 h-3.5 text-[#242e84]" />
+              <Ruler className="w-3.5 h-3.5 text-[var(--icon-steel)]" />
               <span>Ruler & Margins</span>
             </button>
 
@@ -203,7 +203,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]/50 hover:text-[var(--text-primary)]'
               }`}
             >
-              <Info className="w-3.5 h-3.5 text-[#242e84]" />
+              <Info className="w-3.5 h-3.5 text-[var(--icon-steel)]" />
               <span>Shortcuts & Info</span>
             </button>
           </aside>
@@ -233,7 +233,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => switchEngine(eng.id)}
                         className={`p-3 rounded border cursor-pointer transition-all ${
                           isActive
-                            ? 'border-[#242e84] ring-1 ring-[#242e84]/40 bg-[var(--bg-subtle)]/30'
+                            ? 'border-[var(--icon-steel)] ring-1 ring-[var(--icon-steel)]/40 bg-[var(--bg-subtle)]/30'
                             : 'border-[var(--border-color)] hover:border-zinc-400 bg-[var(--bg-surface)]'
                         }`}
                       >
@@ -260,7 +260,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div
                             className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border shrink-0 ml-3 ${
                               isActive
-                                ? 'bg-[#242e84] border-[#242e84] text-white'
+                                ? 'bg-[var(--accent)] border-[var(--icon-steel)] text-white'
                                 : 'border-[var(--border-color)]'
                             }`}
                           >
@@ -345,7 +345,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="button"
                       onClick={handleRepairVenv}
                       disabled={isRepairing || venvState.isSettingUp}
-                      className="shrink-0 ml-3 flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] text-xs font-medium border border-[var(--border-color)] transition-colors disabled:opacity-50 cursor-pointer"
+                      className="shrink-0 ml-3 flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-subtle)] hover:bg-[var(--border-color)] text-[var(--text-primary)] text-xs font-medium border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${(isRepairing || venvState.isSettingUp) ? 'animate-spin' : ''}`} />
                       <span>{isRepairing ? 'Repairing...' : 'Repair / Reinstall'}</span>
@@ -391,7 +391,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onChange={(e) => setRulerVisible(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#242e84]"></div>
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent)]"></div>
                   </label>
                 </div>
 
@@ -412,13 +412,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={() => setRulerPosition('top')}
                       className={`p-3 rounded border text-left flex flex-col justify-between transition-all cursor-pointer ${
                         rulerPosition === 'top'
-                          ? 'border-[#242e84] ring-1 ring-[#242e84]/40 bg-[var(--bg-subtle)]/40 font-semibold'
+                          ? 'border-[var(--icon-steel)] ring-1 ring-[var(--icon-steel)]/40 bg-[var(--bg-subtle)]/40 font-semibold'
                           : 'border-[var(--border-color)] hover:border-zinc-400 bg-[var(--bg-surface)]'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full mb-1.5">
                         <span className="text-xs text-[var(--text-primary)]">Top of Document</span>
-                        {rulerPosition === 'top' && <Check className="w-3.5 h-3.5 text-[#242e84]" />}
+                        {rulerPosition === 'top' && <Check className="w-3.5 h-3.5 text-[var(--icon-steel)]" />}
                       </div>
                       <span className="text-[11px] text-[var(--text-secondary)] font-normal">
                         Canonical word-processor location above the document page
@@ -430,13 +430,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={() => setRulerPosition('bottom')}
                       className={`p-3 rounded border text-left flex flex-col justify-between transition-all cursor-pointer ${
                         rulerPosition === 'bottom'
-                          ? 'border-[#242e84] ring-1 ring-[#242e84]/40 bg-[var(--bg-subtle)]/40 font-semibold'
+                          ? 'border-[var(--icon-steel)] ring-1 ring-[var(--icon-steel)]/40 bg-[var(--bg-subtle)]/40 font-semibold'
                           : 'border-[var(--border-color)] hover:border-zinc-400 bg-[var(--bg-surface)]'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full mb-1.5">
                         <span className="text-xs text-[var(--text-primary)]">Bottom of Document</span>
-                        {rulerPosition === 'bottom' && <Check className="w-3.5 h-3.5 text-[#242e84]" />}
+                        {rulerPosition === 'bottom' && <Check className="w-3.5 h-3.5 text-[var(--icon-steel)]" />}
                       </div>
                       <span className="text-[11px] text-[var(--text-secondary)] font-normal">
                         Docked as a footer ruler at the bottom of the workspace
@@ -459,7 +459,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setPageMargins({ left: 1.0, right: 1.0 })}
-                      className="text-[11px] text-[#242e84] hover:underline cursor-pointer font-medium"
+                      className="text-[11px] text-[var(--icon-steel)] hover:underline cursor-pointer font-medium"
                     >
                       Reset to 1.0"
                     </button>
@@ -483,7 +483,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               setPageMargins((prev) => ({ ...prev, left: Math.max(0.25, Math.min(3.5, val)) }));
                             }
                           }}
-                          className="w-24 px-2 py-1 text-xs border border-[var(--border-color)] rounded bg-[var(--bg-surface)] text-[var(--text-primary)] outline-none focus:border-[#242e84]"
+                          className="w-24 px-2 py-1 text-xs border border-[var(--border-color)] rounded bg-[var(--bg-surface)] text-[var(--text-primary)] outline-none focus:border-[var(--icon-steel)]"
                         />
                         <span className="text-xs text-[var(--text-muted)]">in</span>
                       </div>
@@ -506,7 +506,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               setPageMargins((prev) => ({ ...prev, right: Math.max(0.25, Math.min(3.5, val)) }));
                             }
                           }}
-                          className="w-24 px-2 py-1 text-xs border border-[var(--border-color)] rounded bg-[var(--bg-surface)] text-[var(--text-primary)] outline-none focus:border-[#242e84]"
+                          className="w-24 px-2 py-1 text-xs border border-[var(--border-color)] rounded bg-[var(--bg-surface)] text-[var(--text-primary)] outline-none focus:border-[var(--icon-steel)]"
                         />
                         <span className="text-xs text-[var(--text-muted)]">in</span>
                       </div>
@@ -538,7 +538,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="p-3 rounded bg-[var(--bg-subtle)]/40 border border-[var(--border-color)]">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
-                      <RefreshCw className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin text-[#242e84]' : 'text-[var(--text-secondary)]'}`} />
+                      <RefreshCw className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin text-[var(--icon-steel)]' : 'text-[var(--text-secondary)]'}`} />
                       <h4 className="text-xs font-semibold text-[var(--text-primary)]">Software Updates</h4>
                     </div>
                     {updaterState.status !== 'downloading' && updaterState.status !== 'checking' && (
@@ -554,7 +554,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {updaterState.status === 'checking' && (
                     <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] py-1">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#242e84]" />
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[var(--icon-steel)]" />
                       <span>Checking GitHub for updates...</span>
                     </div>
                   )}
@@ -573,7 +573,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </span>
                       <button
                         onClick={handleDownloadUpdate}
-                        className="px-3 py-1 bg-[#242e84] hover:bg-[#1a2266] text-white rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                        className="px-3 py-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Download</span>
@@ -593,7 +593,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <div className="w-full h-1.5 bg-[var(--bg-chrome)] rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[#242e84] rounded-full transition-all duration-200"
+                          className="h-full bg-[var(--icon-steel)] rounded-full transition-all duration-200"
                           style={{ width: `${Math.min(updaterState.progress?.percent ?? 0, 100)}%` }}
                         />
                       </div>
@@ -632,7 +632,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Keyboard Shortcuts Reference */}
                 <div>
                   <h4 className="text-xs font-semibold text-[var(--text-secondary)] mb-2 flex items-center gap-1.5">
-                    <Command className="w-3.5 h-3.5 text-[#242e84]" />
+                    <Command className="w-3.5 h-3.5 text-[var(--icon-steel)]" />
                     <span>Keyboard Shortcuts</span>
                   </h4>
 
@@ -679,7 +679,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-[#242e84] hover:bg-[#1a2266] text-white rounded text-xs font-medium transition-colors"
+            className="px-4 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded text-xs font-medium transition-colors"
           >
             Done
           </button>

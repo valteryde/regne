@@ -28,11 +28,59 @@ class RegneLine implements languages.IState {
   }
 }
 
+function defineRegneTheme(): void {
+  editor.defineTheme("regne", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      { token: "keyword", foreground: "8eb4ff" },
+      { token: "string", foreground: "e0a15c" },
+      { token: "type", foreground: "c8c2b6" },
+      { token: "comment", foreground: "9a948c" },
+      { token: "predefined", foreground: "f0a8a4" },
+      { token: "variable", foreground: "8eb4f8" },
+      { token: "number", foreground: "7dcea0" },
+      { token: "operator", foreground: "d4b4e8" },
+      { token: "unit", foreground: "f0a070" },
+    ],
+    colors: {
+      "editor.background": "#100f0e",
+      "editor.foreground": "#e6e2d8",
+      "editorLineNumber.foreground": "#8f8a82",
+      "editorLineNumber.activeForeground": "#e6e2d8",
+      "editor.lineHighlightBackground": "#24211e",
+      "editor.lineHighlightBorder": "#00000000",
+      "editor.selectionBackground": "#3a342c",
+      "editor.inactiveSelectionBackground": "#2c2926",
+      "editorCursor.foreground": "#e6e2d8",
+      "editorWidget.background": "#171614",
+      "editorWidget.border": "#2c2926",
+      "editorSuggestWidget.background": "#171614",
+      "editorSuggestWidget.border": "#2c2926",
+      "editorSuggestWidget.foreground": "#e6e2d8",
+      "editorSuggestWidget.selectedBackground": "#24211e",
+      "editorSuggestWidget.highlightForeground": "#e0b15c",
+      "editorHoverWidget.background": "#171614",
+      "editorHoverWidget.border": "#2c2926",
+      "scrollbarSlider.background": "#2c292680",
+      "scrollbarSlider.hoverBackground": "#8f8a8280",
+    },
+  });
+  editor.setTheme("regne");
+}
+
 /** Colors statements, headings, and paragraphs, and completes names and units. */
 export function registerRegneLanguage(): void {
-  if (registered) return;
+  if (registered) {
+    defineRegneTheme();
+    return;
+  }
   registered = true;
-  languages.register({ id: "regne" });
+  try {
+    languages.register({ id: "regne" });
+  } catch {
+    // A reload registers the language again. The tokenizer below replaces the old one.
+  }
   languages.setTokensProvider("regne", {
     getInitialState: () => new RegneLine(false),
     tokenize(line, state) {
@@ -45,22 +93,7 @@ export function registerRegneLanguage(): void {
       return { tokens, endState: new RegneLine(statementContinues(line, continued)) };
     },
   });
-  editor.defineTheme("regne", {
-    base: "vs",
-    inherit: true,
-    rules: [
-      { token: "keyword", foreground: "1d4ed8" },
-      { token: "string", foreground: "b45309" },
-      { token: "type", foreground: "3f3f46" },
-      { token: "comment", foreground: "6b7280" },
-      { token: "predefined", foreground: "7f1d1d" },
-      { token: "variable", foreground: "1e3a8a" },
-      { token: "number", foreground: "0f766e" },
-      { token: "operator", foreground: "6d28d9" },
-      { token: "unit", foreground: "c2410c" },
-    ],
-    colors: {},
-  });
+  defineRegneTheme();
   languages.registerCompletionItemProvider("regne", {
     triggerCharacters: ["[", " "],
     provideCompletionItems(model, position) {
@@ -84,3 +117,5 @@ export function registerRegneLanguage(): void {
     },
   });
 }
+
+defineRegneTheme();
