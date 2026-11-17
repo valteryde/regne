@@ -8,6 +8,7 @@ export interface StatementDisplay {
   inputLatex: string;
   valueLatex: string;
   valueKind: string;
+  valueSvg: string;
   error: string | null;
   /** The source no longer parses, so the drawing is the previous good one. */
   stale: boolean;
@@ -17,6 +18,7 @@ export interface FreshValue {
   latex: string;
   kind: string;
   message?: string;
+  svg?: string;
 }
 
 /**
@@ -42,6 +44,7 @@ export function reconcileDisplays(
         inputLatex: prior?.inputLatex ?? "",
         valueLatex: prior?.valueLatex ?? "",
         valueKind: prior?.valueKind ?? "error",
+        valueSvg: prior?.valueSvg ?? "",
         error: block.error?.message ?? "Enter a statement.",
         stale: prior != null && prior.inputLatex !== "",
       });
@@ -54,6 +57,7 @@ export function reconcileDisplays(
       inputLatex: toLatex(block.parsed.node, null),
       valueLatex: value.latex,
       valueKind: value.kind,
+      valueSvg: value.svg ?? "",
       error: value.kind === "error" ? value.message || value.latex || "Error" : null,
       stale: false,
     });
