@@ -29,14 +29,39 @@ interface DocumentHeaderProps {
   onOpenSettings: () => void;
 }
 
+function useMacTrafficLightInset(): boolean {
+  const api = window.regneAPI || window.hypatiaAPI;
+  const mac = api?.getPlatform() === 'darwin';
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!mac || !api?.onFullscreenChange) return;
+    let alive = true;
+    const unsubscribe = api.onFullscreenChange((value) => {
+      if (alive) setFullscreen(value);
+    });
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
+  }, [api, mac]);
+
+  return mac && !fullscreen;
+}
+
 export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSettings }) => {
   const { invertPage, setInvertPage } = useTheme();
   const title = label?.title || 'Regne';
   const computing = !label || label.computing;
   const broken = label?.broken ?? 0;
+  const macInset = useMacTrafficLightInset();
 
   return (
-    <header className="relative z-20 flex items-center h-10 px-3 gap-5 border-b border-[var(--border-color)] bg-[var(--bg-chrome)] shrink-0">
+    <header
+      className={`relative z-20 flex items-center h-10 pr-3 gap-5 border-b border-[var(--border-color)] bg-[var(--bg-chrome)] shrink-0 select-none ${
+        macInset ? 'pl-20 regne-drag' : 'pl-3'
+      }`}
+    >
       <div className="flex items-center gap-2 min-w-0">
         <img src={iconUrl} alt="" className="w-[18px] h-[18px] shrink-0 select-none" />
         <span className="text-[13px] truncate" title={title}>
@@ -51,7 +76,7 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
         )}
       </div>
 
-      <nav className="flex items-center gap-3 min-w-0" aria-label="Document">
+      <nav className="regne-no-drag flex items-center gap-3 min-w-0" aria-label="Document">
         <div className="flex items-center">
           <HeaderButton tone="brass" label="New" onClick={() => dispatchSourceCommand('new')}>
             <FilePlus />
@@ -83,7 +108,7 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
         <UnitsMenu />
       </nav>
 
-      <div className="ml-auto flex items-center gap-1 shrink-0">
+      <div className="regne-no-drag ml-auto flex items-center gap-1 shrink-0">
         <PowerStatus computing={computing} broken={broken} />
         <HeaderButton
           tone="steel"

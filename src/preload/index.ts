@@ -67,6 +67,7 @@ export interface RegneAPI {
   onFileOpenRequest: (callback: (data: { filePath: string; content: string }) => void) => () => void;
   getPlatform: () => string;
   getVersion: () => Promise<string>;
+  onFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
   casSympy: {
     getStatus: () => Promise<{ ready: boolean; error: string | null; version: string | null }>;
     evaluate: (id: string, code: string) => Promise<any>;
@@ -141,6 +142,14 @@ const api: RegneAPI = {
 
   getPlatform: () => process.platform,
   getVersion: () => ipcRenderer.invoke('app:get-version'),
+  onFullscreenChange: (callback: (fullscreen: boolean) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, fullscreen: boolean) => callback(fullscreen);
+    ipcRenderer.on('window:fullscreen', subscription);
+    ipcRenderer.invoke('window:isFullscreen').then((fullscreen: boolean) => callback(Boolean(fullscreen))).catch(() => {});
+    return () => {
+      ipcRenderer.removeListener('window:fullscreen', subscription);
+    };
+  },
 
   casSympy: {
     getStatus: () => ipcRenderer.invoke('cas:sympy:status'),

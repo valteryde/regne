@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -66,13 +66,16 @@ const isDev = process.env.NODE_ENV === 'development' || !(app?.isPackaged);
 function createWindow() {
   const iconPath = getAppPngIconPath() || getAppIconPath();
 
-  mainWindow = new BrowserWindow({
+  // nativeTheme stays light so MathLive does not switch to dark controls.
+  // On macOS that also paints a white title bar, so hide it and let the
+  // dark header sit under the traffic lights.
+  const windowOptions: BrowserWindowConstructorOptions = {
     width: 1280,
     height: 860,
     minWidth: 800,
     minHeight: 600,
     title: 'Regne - Mathematical CAS Document Workspace',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#171614',
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -81,7 +84,21 @@ function createWindow() {
       sandbox: false,
       webSecurity: false,
     },
-  });
+  };
+  if (process.platform === 'darwin') {
+    windowOptions.titleBarStyle = 'hidden';
+    windowOptions.trafficLightPosition = { x: 14, y: 14 };
+  }
+  mainWindow = new BrowserWindow(windowOptions);
+
+  if (process.platform === 'darwin') {
+    const sendFullscreen = () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send('window:fullscreen', mainWindow.isFullScreen());
+    };
+    mainWindow.on('enter-full-screen', sendFullscreen);
+    mainWindow.on('leave-full-screen', sendFullscreen);
+  }
 
   const menu = createApplicationMenu(mainWindow, () => performUpdateCheck(true));
   if (process.platform === 'darwin') {
@@ -286,6 +303,10 @@ ipcMain.handle('dialog:confirmDiscard', async (_event, { docTitle }) => {
   if (result.response === 0) return 'save';
   if (result.response === 1) return 'discard';
   return 'cancel';
+});
+
+ipcMain.handle('window:isFullscreen', () => {
+  return mainWindow?.isFullScreen() ?? false;
 });
 
 // IPC: Update Window State (macOS title, proxy icon, dirty indicator)

@@ -193,6 +193,17 @@ math-field::part(menu-toggle) {
   pointer-events: none;
 }
 
+/* Hidden Mac title bar: the header is the drag region. Controls stay clickable. */
+.regne-drag,
+.regne-drag * {
+  -webkit-app-region: drag;
+}
+
+.regne-no-drag,
+.regne-no-drag * {
+  -webkit-app-region: no-drag;
+}
+
 .ribbon-row {
   display: flex;
   flex-wrap: wrap;
