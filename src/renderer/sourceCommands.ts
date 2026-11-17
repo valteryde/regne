@@ -19,6 +19,7 @@ export interface SourceHeading {
 
 export interface SourceLabel {
   title: string;
+  path: string | null;
   dirty: boolean;
   /** A recompute is waiting or in flight. */
   computing: boolean;
@@ -49,7 +50,7 @@ export function useSourceLabel(): SourceLabel | null {
 }
 
 type CommandHandler = (command: SourceCommand) => void;
-type OpenHandler = (content: string, filePath: string) => void;
+type OpenHandler = (content: string, filePath: string, revealOffset?: number) => void;
 type RevealHandler = (offset: number) => void;
 type InsertHandler = (name: string) => void;
 
@@ -92,8 +93,8 @@ export function dispatchSourceCommand(command: SourceCommand): void {
   onCommand?.(command);
 }
 
-export function dispatchSourceFileOpen(content: string, filePath: string): boolean {
+export function dispatchSourceFileOpen(content: string, filePath: string, revealOffset?: number): boolean {
   if (!onOpen) return false;
-  onOpen(content, filePath);
+  onOpen(content, filePath, revealOffset);
   return true;
 }

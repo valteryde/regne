@@ -5,6 +5,7 @@ import * as fsSync from 'fs';
 import { ChildProcess, spawn, spawnSync } from 'child_process';
 import * as readline from 'readline';
 import { createApplicationMenu } from './menu';
+import { listDirectory, searchFolder } from './workspaceFiles';
 import { autoUpdater } from 'electron-updater';
 import { macUpdater } from './macUpdater';
 
@@ -214,6 +215,58 @@ ipcMain.handle('file:readFile', async (_event, { filePath }) => {
     return { success: true, content };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to read file' };
+  }
+});
+
+ipcMain.handle('dialog:openFolder', async () => {
+  if (!mainWindow) return { success: false, error: 'No main window' };
+
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Open Folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+    return { success: true, folderPath: result.filePaths[0] };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to open folder' };
+  }
+});
+
+ipcMain.handle('fs:listDirectory', async (_event, { root, dirPath }: { root?: string; dirPath?: string }) => {
+  try {
+    if (!root || !dirPath) return { success: false, error: 'Open a folder first.' };
+    const entries = await listDirectory(root, dirPath);
+    return { success: true, entries };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Could not read that folder.' };
+  }
+});
+
+ipcMain.handle('fs:recentDocuments', async () => {
+  const recent = typeof app.getRecentDocuments === 'function' ? app.getRecentDocuments() : [];
+  const paths: string[] = [];
+  for (const filePath of recent) {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) paths.push(filePath);
+    } catch {
+      // The file was moved or deleted.
+    }
+    if (paths.length >= 12) break;
+  }
+  return { success: true, paths };
+});
+
+ipcMain.handle('fs:search', async (_event, { root, query }: { root?: string; query?: string }) => {
+  try {
+    if (!root || typeof query !== 'string') return { success: false, error: 'Open a folder first.' };
+    const result = await searchFolder(root, query);
+    return { success: true, hits: result.hits, truncated: result.truncated };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Search failed.' };
   }
 });
 

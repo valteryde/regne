@@ -60,6 +60,10 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
           accelerator: 'CmdOrCtrl+O',
           click: () => sendCommand('open-file'),
         },
+        {
+          label: 'Open Folder...',
+          click: () => sendCommand('open-folder'),
+        },
         ...(!isMac ? [
           { type: 'separator' as const },
           {
@@ -115,6 +119,22 @@ export function createApplicationMenu(mainWindow: BrowserWindow, checkForUpdates
     {
       label: '&View',
       submenu: [
+        {
+          label: 'Explorer',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => sendCommand('show-explorer'),
+        },
+        {
+          label: 'Search',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => sendCommand('show-search'),
+        },
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => sendCommand('toggle-sidebar'),
+        },
+        { type: 'separator' },
         {
           label: 'Zoom In',
           accelerator: 'CmdOrCtrl+=',

@@ -499,6 +499,7 @@ export const SourcePage: React.FC = () => {
   useEffect(() => {
     publishSourceLabel({
       title: documentTitle(source, path),
+      path,
       dirty,
       computing,
       broken: brokenLineNumbers(source, displays).length,
@@ -510,6 +511,19 @@ export const SourcePage: React.FC = () => {
 
   useEffect(() => {
     publish(sourceRef.current, pathRef.current, sourceRef.current !== savedRef.current);
+    const revealAt = (offset: number) => {
+      const codeEditor = editorRef.current;
+      const model = codeEditor?.getModel();
+      if (!codeEditor || !model) return;
+      const start = Math.max(0, Math.min(offset, model.getValueLength()));
+      const position = model.getPositionAt(start);
+      const end = model.getOffsetAt({
+        lineNumber: position.lineNumber,
+        column: model.getLineMaxColumn(position.lineNumber),
+      });
+      selectSpan(codeEditor, { start, end });
+      codeEditor.focus();
+    };
     return registerSourceCommands(
       (command) => {
         const editor = editorRef.current;
@@ -536,25 +550,16 @@ export const SourcePage: React.FC = () => {
           codeEditor.focus();
         }
       },
-      (content, filePath) => {
+      (content, filePath, revealOffset) => {
         void (async () => {
           if (!(await actions.current.confirmLeave())) return;
           actions.current.applyText(content, filePath);
+          const shown = editorRef.current?.getValue();
+          if (revealOffset != null && shown === content) revealAt(revealOffset);
+          else editorRef.current?.focus();
         })();
       },
-      (offset) => {
-        const codeEditor = editorRef.current;
-        const model = codeEditor?.getModel();
-        if (!codeEditor || !model) return;
-        const start = Math.max(0, Math.min(offset, model.getValueLength()));
-        const position = model.getPositionAt(start);
-        const end = model.getOffsetAt({
-          lineNumber: position.lineNumber,
-          column: model.getLineMaxColumn(position.lineNumber),
-        });
-        selectSpan(codeEditor, { start, end });
-        codeEditor.focus();
-      },
+      revealAt,
       (name) => {
         const codeEditor = editorRef.current;
         const model = codeEditor?.getModel();

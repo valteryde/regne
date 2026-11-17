@@ -8,6 +8,7 @@ import { UpdateNotification } from './components/Updater/UpdateNotification';
 import { DocumentHeader } from './components/Header/DocumentHeader';
 import { VenvSetupBanner } from './components/Toolbar/VenvSetupBanner';
 import { useSourceLabel } from './sourceCommands';
+import { Sidebar } from './components/Sidebar/Sidebar';
 
 const MainLayout: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -40,6 +41,7 @@ const MainLayout: React.FC = () => {
       <VenvSetupBanner />
 
       <main className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+        <Sidebar />
         <SourcePage />
       </main>
 
