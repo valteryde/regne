@@ -507,11 +507,11 @@ export const SourcePage: React.FC = () => {
   }, []);
 
   return (
-    <div data-regne-source className="flex flex-1 min-h-0 h-full">
-      <div className="w-1/2 min-w-0 min-h-0 border-r border-[var(--border-color)]">
+    <div data-regne-source className="flex flex-1 min-h-0 min-w-0 h-full overflow-hidden">
+      <div className="w-1/2 min-w-0 min-h-0 h-full overflow-hidden border-r border-[var(--border-color)]">
         <div ref={hostRef} className="h-full" />
       </div>
-      <div className="w-1/2 min-w-0 min-h-0">
+      <div className="w-1/2 min-w-0 min-h-0 h-full overflow-hidden">
         <Sheet
           source={source}
           displays={displays}

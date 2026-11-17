@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { Span } from "../../../language/ast";
 import { FreshValue, StatementDisplay } from "../../../language/displays";
 import { PageBlock, pageDocument } from "../../../language/page";
 import { PointerTarget } from "../../../language/selection";
+import { CSS_DPI, sheetScale } from "../../utils/pageGeometry";
 import { KaTeXRenderer } from "../Worksheet/KaTeXRenderer";
 import { readPointer } from "./pointer";
 
@@ -40,14 +41,49 @@ export const Sheet: React.FC<SheetProps> = ({
   onPointerDown,
 }) => {
   const blocks = pageDocument(source, displays, selection, inlineValues);
-  const width = paperWidth * 96;
+  const width = paperWidth * CSS_DPI;
+  const pageRef = useRef<HTMLDivElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
+  const [frameWidth, setFrameWidth] = useState(0);
+  const [sheetHeight, setSheetHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const page = pageRef.current;
+    if (!page) return;
+    const measure = () => {
+      const next = page.offsetWidth;
+      setFrameWidth((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(page);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const article = articleRef.current;
+    if (!article) return;
+    const measure = () => {
+      const next = article.offsetHeight;
+      setSheetHeight((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(article);
+    return () => observer.disconnect();
+  }, []);
+
+  const scale = sheetScale(frameWidth, width, zoom);
+  const fittedWidth = Math.ceil(width * scale);
+  const fittedHeight = Math.ceil(sheetHeight * scale);
 
   return (
     <div
+      ref={pageRef}
       data-regne-page
       tabIndex={-1}
       aria-label="Document"
-      className="h-full overflow-auto bg-[var(--bg-canvas)] outline-none"
+      className="h-full min-h-0 overflow-auto bg-[var(--bg-canvas)] outline-none"
       onMouseDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -55,17 +91,18 @@ export const Sheet: React.FC<SheetProps> = ({
         onPointerDown?.(readPointer(event.target));
       }}
     >
-      <div className="flex justify-center py-6 px-4" style={{ minWidth: "100%" }}>
-        <div style={{ width: width * zoom }}>
+      <div className="py-6" style={{ width: "fit-content", marginInline: "auto" }}>
+        <div className="relative overflow-hidden" style={{ width: fittedWidth, height: fittedHeight }}>
           <article
-            className="bg-white border border-[var(--border-color)] text-[var(--text-primary)]"
+            ref={articleRef}
+            className="absolute top-0 left-0 bg-white border border-[var(--border-color)] text-[var(--text-primary)]"
             style={{
               width,
               minHeight: "11in",
-              transform: `scale(${zoom})`,
+              transform: `scale(${scale})`,
               transformOrigin: "top left",
-              paddingLeft: marginLeft * 96,
-              paddingRight: marginRight * 96,
+              paddingLeft: marginLeft * CSS_DPI,
+              paddingRight: marginRight * CSS_DPI,
               paddingTop: "2.5rem",
               paddingBottom: "4rem",
             }}
