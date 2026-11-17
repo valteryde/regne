@@ -62,6 +62,15 @@ export function brokenLineNumbers(source: string, displays: StatementDisplay[]):
     .map((display) => lineNumberAt(source, display.start));
 }
 
+/** The next broken line after the caret, wrapping to the first. */
+export function nextBrokenLine(lines: number[], currentLine: number): number | null {
+  if (lines.length === 0) return null;
+  for (const line of lines) {
+    if (line > currentLine) return line;
+  }
+  return lines[0];
+}
+
 /** 1-based line of a file offset, for marking a broken statement in the source. */
 export function lineNumberAt(source: string, offset: number): number {
   let line = 1;

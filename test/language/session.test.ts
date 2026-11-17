@@ -10,6 +10,7 @@ import {
   createPause,
   brokenLineNumbers,
   lineNumberAt,
+  nextBrokenLine,
   paint,
   runnableStatements,
   storeValues,
@@ -46,7 +47,15 @@ describe("the page", () => {
     assert.equal(temperature.valueLatex, TEMPERATURE.latex);
     assert.ok(temperature.error);
     assert.equal(lineNumberAt(broken, temperature.start) > 1, true);
-    assert.deepEqual(brokenLineNumbers(broken, next), [lineNumberAt(broken, temperature.start)]);
+    const lines = brokenLineNumbers(broken, next);
+    assert.deepEqual(lines, [lineNumberAt(broken, temperature.start)]);
+    assert.equal(nextBrokenLine(lines, 1), lines[0]);
+    assert.equal(nextBrokenLine(lines, lines[0]), lines[0]);
+    assert.equal(nextBrokenLine([], 1), null);
+    assert.deepEqual(
+      [nextBrokenLine([2, 5], 1), nextBrokenLine([2, 5], 2), nextBrokenLine([2, 5], 5)],
+      [2, 5, 2],
+    );
   });
 
   test("changing 66 changes the cache key of the temperature and not the pressure", () => {

@@ -1,0 +1,205 @@
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  FileCode,
+  FilePlus,
+  FileText,
+  FolderOpen,
+  ListTree,
+  Power,
+  Redo2,
+  Save,
+  Settings,
+  Undo2,
+} from 'lucide-react';
+import iconUrl from '../../assets/icon.png';
+import {
+  dispatchSourceCommand,
+  revealSource,
+  type SourceCommand,
+  type SourceLabel,
+} from '../../sourceCommands';
+
+interface DocumentHeaderProps {
+  label: SourceLabel | null;
+  onOpenSettings: () => void;
+}
+
+export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSettings }) => {
+  const title = label?.title || 'Regne';
+  const computing = !label || label.computing;
+  const broken = label?.broken ?? 0;
+
+  return (
+    <header className="relative z-20 flex items-center h-10 px-3 gap-5 border-b border-[var(--border-color)] bg-[var(--bg-canvas)] shrink-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <img src={iconUrl} alt="" className="w-[18px] h-[18px] shrink-0 select-none" />
+        <span className="text-[13px] truncate" title={title}>
+          {title}
+        </span>
+        {label?.dirty && (
+          <span
+            role="img"
+            aria-label="Unsaved changes"
+            className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] shrink-0"
+          />
+        )}
+      </div>
+
+      <nav className="flex items-center gap-3 min-w-0" aria-label="Document">
+        <div className="flex items-center">
+          <HeaderButton label="New" onClick={() => dispatchSourceCommand('new')}>
+            <FilePlus />
+          </HeaderButton>
+          <HeaderButton label="Open" onClick={() => dispatchSourceCommand('open')}>
+            <FolderOpen />
+          </HeaderButton>
+          <HeaderButton label="Save" mark={label?.dirty} onClick={() => dispatchSourceCommand('save')}>
+            <Save />
+          </HeaderButton>
+        </div>
+        <div className="flex items-center">
+          <HeaderButton label="Undo" onClick={() => dispatchSourceCommand('undo')}>
+            <Undo2 />
+          </HeaderButton>
+          <HeaderButton label="Redo" onClick={() => dispatchSourceCommand('redo')}>
+            <Redo2 />
+          </HeaderButton>
+        </div>
+        <div className="flex items-center">
+          <HeaderButton label="Export LaTeX" onClick={() => dispatchSourceCommand('export')}>
+            <FileText />
+          </HeaderButton>
+          <HeaderButton label="Export HTML" onClick={() => dispatchSourceCommand('export-html')}>
+            <FileCode />
+          </HeaderButton>
+        </div>
+        <SectionsMenu headings={label?.headings ?? []} />
+      </nav>
+
+      <div className="ml-auto flex items-center gap-1 shrink-0">
+        <PowerStatus computing={computing} broken={broken} />
+        <HeaderButton label="Settings" onClick={onOpenSettings}>
+          <Settings />
+        </HeaderButton>
+      </div>
+    </header>
+  );
+};
+
+function HeaderButton({
+  label,
+  onClick,
+  mark,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  mark?: boolean;
+  pressed?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`inline-flex items-center justify-center w-7 h-7 [&_svg]:w-4 [&_svg]:h-4 [&_svg]:stroke-[1.5] ${
+        mark ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SectionsMenu({ headings }: { headings: SourceLabel['headings'] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <HeaderButton label="Sections" pressed={open} onClick={() => setOpen((value) => !value)}>
+        <ListTree />
+      </HeaderButton>
+      {open && (
+        <div
+          role="menu"
+          className="absolute top-full left-0 mt-1 min-w-52 max-w-72 max-h-64 overflow-auto border border-[var(--border-color)] bg-[var(--bg-surface)] py-1 z-20"
+        >
+          {headings.length === 0 ? (
+            <p className="px-3 py-1.5 text-[13px] text-[var(--text-muted)]">No sections</p>
+          ) : (
+            headings.map((heading) => (
+              <button
+                key={`${heading.start}:${heading.title}`}
+                type="button"
+                role="menuitem"
+                className="block w-full text-left text-[13px] py-1.5 pr-3 text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] truncate"
+                style={{ paddingLeft: `${0.75 + (heading.level - 1) * 0.75}rem` }}
+                onClick={() => {
+                  revealSource(heading.start);
+                  setOpen(false);
+                }}
+              >
+                {heading.title}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PowerStatus({ computing, broken }: { computing: boolean; broken: number }) {
+  const text = computing ? 'Computing' : broken === 1 ? '1 line' : broken > 1 ? `${broken} lines` : 'Ready';
+  const brokenPage = !computing && broken > 0;
+  const className =
+    'inline-flex items-center gap-1.5 h-7 px-1.5 text-[12px] text-[var(--text-muted)] [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:stroke-[1.5]';
+
+  const body = (
+    <>
+      <Power />
+      <span className="whitespace-nowrap">{text}</span>
+    </>
+  );
+
+  if (brokenPage) {
+    return (
+      <button
+        type="button"
+        title="Next broken line"
+        aria-label={`Next broken line, ${text}`}
+        onClick={() => dispatchSourceCommand('next-broken' satisfies SourceCommand)}
+        className={`${className} hover:text-[var(--text-primary)]`}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <span className={className} title={computing ? 'Computing' : 'Engine ready'} aria-live="polite">
+      {body}
+    </span>
+  );
+}

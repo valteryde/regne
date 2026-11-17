@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { SourcePage } from './components/SourcePage/SourcePage';
 import { SettingsModal } from './components/Dialogs/SettingsModal';
 import { UpdateNotification } from './components/Updater/UpdateNotification';
+import { DocumentHeader } from './components/Header/DocumentHeader';
 import { VenvSetupBanner } from './components/Toolbar/VenvSetupBanner';
 import { useSourceLabel } from './sourceCommands';
 
@@ -34,16 +35,7 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] font-sans text-[var(--text-primary)]">
-      <header className="flex items-center justify-between h-10 px-4 border-b border-[var(--border-color)] bg-[var(--bg-canvas)] shrink-0">
-        <span className="text-sm truncate">{label?.title || "Regne"}</span>
-        <button
-          type="button"
-          className="text-sm px-2 py-1"
-          onClick={() => setIsSettingsOpen(true)}
-        >
-          Settings
-        </button>
-      </header>
+      <DocumentHeader label={label} onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <VenvSetupBanner />
 

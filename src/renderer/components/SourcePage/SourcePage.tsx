@@ -10,6 +10,7 @@ import {
   brokenLineNumbers,
   cachedValues,
   createPause,
+  nextBrokenLine,
   paint,
   storeValues,
 } from "../../../language/session";
@@ -24,7 +25,7 @@ import {
   unionSpan,
 } from "../../../language/selection";
 import { useDocument } from "../../context/DocumentContext";
-import { publishSourceLabel, registerSourceCommands } from "../../sourceCommands";
+import { publishSourceLabel, registerSourceCommands, type SourceHeading } from "../../sourceCommands";
 import { evaluateIr } from "./evaluateIr";
 import { registerRegneLanguage } from "./language";
 import { readPointer } from "./pointer";
@@ -98,6 +99,14 @@ function selectSpan(codeEditor: editor.IStandaloneCodeEditor, span: Span): void 
   codeEditor.revealRangeInCenterIfOutsideViewport(range);
 }
 
+function sourceHeadings(text: string): SourceHeading[] {
+  return readDocument(text).blocks.flatMap((block) =>
+    block.kind === "heading"
+      ? [{ title: block.title.trim() || "Untitled", level: block.level, start: block.span.start }]
+      : [],
+  );
+}
+
 function documentTitle(text: string, filePath: string | null): string {
   if (filePath) return filePath.split(/[/\\]/).pop() || "Untitled.regne";
   const heading = readDocument(text).blocks.find((block) => block.kind === "heading");
@@ -133,6 +142,7 @@ export const SourcePage: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(opened.current.notice);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
+  const [computing, setComputing] = useState(true);
 
   const pauseRef = useRef(
     createPause(
@@ -144,12 +154,14 @@ export const SourcePage: React.FC = () => {
 
   const recompute = async (text: string) => {
     const token = ++generation.current;
+    const current = () => alive.current && token === generation.current;
     const document = readDocument(text);
     if (document.legacy) {
-      if (!alive.current || token !== generation.current) return;
+      if (!current()) return;
       setLegacy(true);
       setEngineError(null);
       setPending(false);
+      setComputing(false);
       displaysRef.current = [];
       setDisplays([]);
       setInlineValues(new Map());
@@ -161,17 +173,17 @@ export const SourcePage: React.FC = () => {
     if (!values) {
       try {
         values = await evaluateIr(plan.map((item) => item.ir));
-        if (!alive.current || token !== generation.current) return;
+        if (!current()) return;
         storeValues(sources, values, cacheRef.current);
         setEngineError(null);
       } catch (err) {
-        if (!alive.current || token !== generation.current) return;
+        if (!current()) return;
         const message = err instanceof Error ? err.message : "The engine failed.";
         setEngineError(message);
         values = sources.map(() => ({ latex: "", kind: "error", message }));
       }
     }
-    if (!alive.current || token !== generation.current) return;
+    if (!current()) return;
     const statementValues = (values ?? []).filter((_, index) => plan[index]?.role === "statement");
     const inlines = new Map<number, FreshValue>();
     plan.forEach((item, index) => {
@@ -182,6 +194,7 @@ export const SourcePage: React.FC = () => {
     setInlineValues(inlines);
     setLegacy(false);
     setPending(false);
+    setComputing(false);
     setDisplays(next);
   };
 
@@ -207,6 +220,9 @@ export const SourcePage: React.FC = () => {
   };
 
   const applyText = (text: string, filePath: string | null) => {
+    pauseRef.current.cancel();
+    generation.current += 1;
+    setComputing(true);
     const openedFile = openBuffer(text);
     text = openedFile.text;
     setNotice(openedFile.notice);
@@ -331,6 +347,8 @@ export const SourcePage: React.FC = () => {
       const isDirty = text !== savedRef.current;
       setDirty(isDirty);
       publish(text, pathRef.current, isDirty);
+      generation.current += 1;
+      setComputing(true);
       pauseRef.current.push(() => {
         void recomputeRef.current(text);
       });
@@ -478,8 +496,14 @@ export const SourcePage: React.FC = () => {
   }, [source, path]);
 
   useEffect(() => {
-    publishSourceLabel({ title: documentTitle(source, path), dirty });
-  }, [source, path, dirty]);
+    publishSourceLabel({
+      title: documentTitle(source, path),
+      dirty,
+      computing,
+      broken: brokenLineNumbers(source, displays).length,
+      headings: sourceHeadings(source),
+    });
+  }, [source, path, dirty, computing, displays]);
 
   useEffect(() => () => publishSourceLabel(null), []);
 
@@ -496,12 +520,39 @@ export const SourcePage: React.FC = () => {
         else if (command === "redo") editor?.trigger("menu", "redo", null);
         else if (command === "export") void actions.current.exportFile("tex");
         else if (command === "export-html") void actions.current.exportFile("html");
+        else if (command === "next-broken") {
+          const codeEditor = editorRef.current;
+          const model = codeEditor?.getModel();
+          if (!codeEditor || !model) return;
+          const line = nextBrokenLine(
+            brokenLineNumbers(sourceRef.current, displaysRef.current),
+            codeEditor.getPosition()?.lineNumber ?? 0,
+          );
+          if (line == null) return;
+          const start = model.getOffsetAt({ lineNumber: line, column: 1 });
+          const end = model.getOffsetAt({ lineNumber: line, column: model.getLineMaxColumn(line) });
+          selectSpan(codeEditor, { start, end });
+          codeEditor.focus();
+        }
       },
       (content, filePath) => {
         void (async () => {
           if (!(await actions.current.confirmLeave())) return;
           actions.current.applyText(content, filePath);
         })();
+      },
+      (offset) => {
+        const codeEditor = editorRef.current;
+        const model = codeEditor?.getModel();
+        if (!codeEditor || !model) return;
+        const start = Math.max(0, Math.min(offset, model.getValueLength()));
+        const position = model.getPositionAt(start);
+        const end = model.getOffsetAt({
+          lineNumber: position.lineNumber,
+          column: model.getLineMaxColumn(position.lineNumber),
+        });
+        selectSpan(codeEditor, { start, end });
+        codeEditor.focus();
       },
     );
   }, []);
