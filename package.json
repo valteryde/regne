@@ -1,8 +1,8 @@
 {
   "name": "regne",
   "productName": "Regne",
-  "version": "1.2.6",
-  "description": "Regne - Mathematical CAS Document Workspace",
+  "version": "2.0.0",
+  "description": "A source file and the page it typesets.",
   "main": "dist/main/main.js",
   "scripts": {
     "brand": "node scripts/brand-electron.cjs",
