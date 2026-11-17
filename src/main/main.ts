@@ -410,7 +410,12 @@ class SympyProcessManager {
   public isDedicatedVenvReady(): boolean {
     const venvPython = this.getVenvPythonPath();
     if (!fsSync.existsSync(venvPython)) return false;
-    return this.testPythonModule(venvPython, 'import sympy');
+    return this.hasMathEnvironment(venvPython);
+  }
+
+  /** SymPy without Pint exits as soon as a quantity is evaluated. */
+  private hasMathEnvironment(pyBin: string): boolean {
+    return this.testPythonModule(pyBin, 'import sympy, pint');
   }
 
   private notifySetupProgress(isSettingUp: boolean, message: string, error: string | null = null, ready = false): void {
@@ -534,15 +539,16 @@ class SympyProcessManager {
         this.notifySetupProgress(true, 'Installing SymPy and mathematical packages...');
         console.log(`[SymPy Manager] Installing packages with ${newVenvPip}`);
 
+        const mathPackages = ['sympy>=1.13.0', 'pint>=0.24'];
         try {
-          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', 'sympy>=1.13.0', 'kaxe>=1.8.1']);
+          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', ...mathPackages, 'kaxe>=1.8.1']);
         } catch (pipErr) {
-          console.warn('[SymPy Manager] Combined install failed, attempting sympy standalone:', pipErr);
-          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', 'sympy>=1.13.0']);
+          console.warn('[SymPy Manager] Plotting library failed, installing SymPy and Pint:', pipErr);
+          await this.execAsync(newVenvPip, ['install', '--no-warn-script-location', ...mathPackages]);
         }
 
-        if (!this.testPythonModule(newVenvPython, 'import sympy')) {
-          throw new Error('SymPy verification failed after pip installation in virtual environment.');
+        if (!this.hasMathEnvironment(newVenvPython)) {
+          throw new Error('SymPy and Pint were not importable after installing the math environment.');
         }
 
         console.log('[SymPy Manager] Dedicated venv provisioned successfully!');
@@ -596,7 +602,7 @@ class SympyProcessManager {
       return;
     }
 
-    // 1. If dedicated venv exists and has sympy, use it directly
+    // 1. If the dedicated environment can import SymPy and Pint, use it.
     if (this.isDedicatedVenvReady()) {
       const venvPy = this.getVenvPythonPath();
       console.log(`[SymPy Manager] Using dedicated Regne venv: ${venvPy}`);
@@ -604,16 +610,16 @@ class SympyProcessManager {
       return;
     }
 
-    // 2. If in development mode and local repository .venv has sympy, use it
+    // 2. In development, a repository environment with SymPy and Pint is enough.
     const isWin = process.platform === 'win32';
     const devPython = path.resolve(process.cwd(), isWin ? '.venv/Scripts/python.exe' : '.venv/bin/python3');
-    if (!app?.isPackaged && fsSync.existsSync(devPython) && this.testPythonModule(devPython, 'import sympy')) {
+    if (!app?.isPackaged && fsSync.existsSync(devPython) && this.hasMathEnvironment(devPython)) {
       console.log(`[SymPy Manager] Using developer repository venv: ${devPython}`);
       this.spawnWorker(devPython, workerScript);
       return;
     }
 
-    // 3. Check if any existing system Python has sympy
+    // 3. A system Python with SymPy and Pint can run while the private environment is installed.
     const homeDir = app ? app.getPath('home') : (process.env.HOME || process.env.USERPROFILE || '');
     const candidatePythons: string[] = isWin
       ? [
@@ -634,7 +640,7 @@ class SympyProcessManager {
     let systemPythonWithSympy: string | null = null;
     for (const cand of candidatePythons) {
       if (path.isAbsolute(cand) && !fsSync.existsSync(cand)) continue;
-      if (this.testPythonModule(cand, 'import sympy')) {
+      if (this.hasMathEnvironment(cand)) {
         systemPythonWithSympy = cand;
         break;
       }
