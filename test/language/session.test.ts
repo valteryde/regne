@@ -7,6 +7,7 @@ import {
   cacheKey,
   cachedValues,
   createPause,
+  brokenLineNumbers,
   lineNumberAt,
   pageRows,
   paint,
@@ -48,6 +49,7 @@ describe("the page", () => {
     assert.equal(temperature.valueLatex, TEMPERATURE.latex);
     assert.ok(temperature.error);
     assert.equal(lineNumberAt(broken, temperature.start) > 1, true);
+    assert.deepEqual(brokenLineNumbers(broken, next), [lineNumberAt(broken, temperature.start)]);
   });
 
   test("changing 66 changes the cache key of the temperature and not the pressure", () => {

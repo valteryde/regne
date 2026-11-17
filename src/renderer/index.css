@@ -123,6 +123,19 @@ math-field::part(menu-toggle) {
   font-size: 1.25rem;
 }
 
+.regne-input .katex,
+.regne-input .katex-display {
+  color: var(--text-primary);
+}
+
+[data-regne-page] .katex-display {
+  text-align: left;
+}
+
+.regne-broken-line {
+  background-color: #fde8e8;
+}
+
 .regne-placeholder:empty::before {
   content: attr(data-placeholder);
   color: var(--text-muted);

@@ -9,6 +9,7 @@ import {
   ElementType,
 } from '../../types/document';
 import { useEngine } from './EngineContext';
+import { dispatchSourceCommand, dispatchSourceFileOpen, sourceCommandsActive } from '../sourceCommands';
 
 interface DocumentContextValue {
   document: RegneDocument;
@@ -1231,6 +1232,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   // Synchronize OS window title and dirty indicator
   useEffect(() => {
+    if (sourceCommandsActive()) return;
     const api = window.regneAPI || window.hypatiaAPI;
     api?.updateWindowState({
       filePath,
@@ -1245,6 +1247,15 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (!api) return;
 
     const unsubCommand = api.onMenuCommand((cmd) => {
+      if (sourceCommandsActive()) {
+        if (cmd === 'save-file') { dispatchSourceCommand('save'); return; }
+        if (cmd === 'save-file-as') { dispatchSourceCommand('save-as'); return; }
+        if (cmd === 'open-file') { dispatchSourceCommand('open'); return; }
+        if (cmd === 'new-file') { dispatchSourceCommand('new'); return; }
+        if (cmd === 'undo') { dispatchSourceCommand('undo'); return; }
+        if (cmd === 'redo') { dispatchSourceCommand('redo'); return; }
+        if (cmd === 'evaluate-math' || cmd === 'evaluate-all' || cmd === 'insert-math' || cmd === 'insert-text') return;
+      }
       switch (cmd) {
         case 'save-file':
           saveDocument(false);
@@ -1302,6 +1313,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
 
     const unsubFile = api.onFileOpenRequest((data) => {
+      if (dispatchSourceFileOpen(data.content, data.filePath)) return;
       loadDocumentFromData(data);
     });
 
@@ -1328,6 +1340,33 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
   // Global keyboard shortcuts (F5, Cmd/Ctrl+S, Cmd/Ctrl+Shift+S, Cmd/Ctrl+O, Cmd/Ctrl+N, Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (sourceCommandsActive()) {
+        const inApp = !!(window.regneAPI || window.hypatiaAPI);
+        if (e.key === 'F5' && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'm') return;
+        if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+          const key = e.key.toLowerCase();
+          if (key === 'z' || (key === 'y' && !e.shiftKey)) {
+            if (!inApp) {
+              e.preventDefault();
+              e.stopPropagation();
+              dispatchSourceCommand(key === 'y' || e.shiftKey ? 'redo' : 'undo');
+            }
+            return;
+          }
+          if (key === 's' || (key === 'o' && !e.shiftKey) || (key === 'n' && !e.shiftKey)) {
+            if (!inApp) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (key === 's') dispatchSourceCommand(e.shiftKey ? 'save-as' : 'save');
+              else if (key === 'o') dispatchSourceCommand('open');
+              else dispatchSourceCommand('new');
+            }
+            return;
+          }
+        }
+        return;
+      }
       if (e.key === 'F5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         toggleMode();

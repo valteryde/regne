@@ -24,6 +24,8 @@ export const KaTeXRenderer: React.FC<KaTeXRendererProps> = ({
         displayMode,
         throwOnError: false,
         strict: false,
+        output: "html",
+        trust: (context) => context.command === "\\htmlClass" || context.command === "\\htmlData",
       });
     } catch (err: any) {
       return `<span class="text-red-500 font-mono text-sm">${math}</span>`;

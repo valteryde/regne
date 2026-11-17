@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDocument } from '../../context/DocumentContext';
+import { dispatchSourceCommand, useSourceLabel } from '../../sourceCommands';
 import { RegneMascot } from '../Brand/RegneMascot';
 import { MainRibbon } from './MainRibbon';
 import { EquationRibbon } from './EquationRibbon';
@@ -48,6 +49,9 @@ export const Ribbon: React.FC<RibbonProps> = ({
     saveDocument,
     openDocument,
   } = useDocument();
+  const sourceLabel = useSourceLabel();
+  const shownTitle = sourceLabel?.title || doc.title?.trim() || "Untitled";
+  const shownDirty = sourceLabel ? sourceLabel.dirty : isDirty;
 
   const [activeTab, setActiveTab] = useState<RibbonTab>('main');
   const [isRibbonCollapsed, setIsRibbonCollapsed] = useState<boolean>(false);
@@ -127,7 +131,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
               <div className="absolute left-0 top-full mt-1 w-52 bg-white rounded-md shadow-xl border border-slate-200 py-1 z-50 text-xs select-none animate-in fade-in zoom-in-95 duration-100">
                 <button
                   onClick={() => {
-                    newDocument();
+                    if (sourceLabel) dispatchSourceCommand("new");
+                    else newDocument();
                     setOpenMenu(null);
                   }}
                   className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
@@ -137,7 +142,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    openDocument();
+                    if (sourceLabel) dispatchSourceCommand("open");
+                    else openDocument();
                     setOpenMenu(null);
                   }}
                   className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
@@ -148,7 +154,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
                 <div className="h-px bg-slate-100 my-1" />
                 <button
                   onClick={() => {
-                    saveDocument(false);
+                    if (sourceLabel) dispatchSourceCommand("save");
+                    else saveDocument(false);
                     setOpenMenu(null);
                   }}
                   className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
@@ -158,7 +165,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    saveDocument(true);
+                    if (sourceLabel) dispatchSourceCommand("save-as");
+                    else saveDocument(true);
                     setOpenMenu(null);
                   }}
                   className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 text-left text-slate-700"
@@ -226,8 +234,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
 
         <div className="flex-1 min-w-0 px-3 flex items-center justify-center">
           <span className="truncate text-[11px] font-medium text-slate-500">
-            {doc.title?.trim() || 'Untitled'}
-            {isDirty ? ' — Unsaved' : ''}
+            {shownTitle}
+            {shownDirty ? " — Unsaved" : ""}
           </span>
         </div>
 

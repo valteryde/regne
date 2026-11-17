@@ -59,6 +59,7 @@ export interface RegneAPI {
   casSympy: {
     getStatus: () => Promise<{ ready: boolean; error: string | null; version: string | null }>;
     evaluate: (id: string, code: string) => Promise<any>;
+    evaluateIr: (id: string, statements: unknown[]) => Promise<any>;
     reset: () => Promise<any>;
     interrupt: () => void;
     getSetupStatus: () => Promise<VenvSetupState>;
@@ -121,6 +122,7 @@ const api: RegneAPI = {
   casSympy: {
     getStatus: () => ipcRenderer.invoke('cas:sympy:status'),
     evaluate: (id: string, code: string) => ipcRenderer.invoke('cas:sympy:eval', { id, code }),
+    evaluateIr: (id: string, statements: unknown[]) => ipcRenderer.invoke('cas:sympy:eval-ir', { id, statements }),
     reset: () => ipcRenderer.invoke('cas:sympy:reset'),
     interrupt: () => ipcRenderer.send('cas:sympy:interrupt'),
     getSetupStatus: () => ipcRenderer.invoke('cas:sympy:setup-status'),

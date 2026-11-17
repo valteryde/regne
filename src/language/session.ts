@@ -98,6 +98,13 @@ export function paint(source: string, values: FreshValue[], previous: StatementD
   return reconcileDisplays(readDocument(source).blocks, previous, values);
 }
 
+/** Lines whose statement failed to parse. An evaluation error is not one of these. */
+export function brokenLineNumbers(source: string, displays: StatementDisplay[]): number[] {
+  return displays
+    .filter((display) => display.stale || (display.error != null && display.inputLatex === ""))
+    .map((display) => lineNumberAt(source, display.start));
+}
+
 /** 1-based line of a file offset, for marking a broken statement in the source. */
 export function lineNumberAt(source: string, offset: number): number {
   let line = 1;

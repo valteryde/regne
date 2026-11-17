@@ -772,6 +772,58 @@ class SympyProcessManager {
     });
   }
 
+  public async evaluateIr(id: string, statements: unknown[]): Promise<any> {
+    if (this.isSettingUp && this.setupPromise) {
+      await this.setupPromise;
+    }
+
+    if (!this.process) {
+      this.start();
+    }
+
+    return new Promise((resolve, reject) => {
+      if (this.statusError) {
+        return resolve({
+          id,
+          success: false,
+          error: this.statusError,
+          executionTimeMs: 0,
+        });
+      }
+
+      const timer = setTimeout(() => {
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id);
+          resolve({
+            id,
+            success: false,
+            error: 'SymPy evaluation timed out (15s)',
+            executionTimeMs: 15000,
+          });
+        }
+      }, 15000);
+
+      this.pendingRequests.set(id, {
+        resolve: (val) => {
+          clearTimeout(timer);
+          resolve(val);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+
+      try {
+        this.process?.stdin?.write(JSON.stringify({ id, action: 'eval-ir', statements }) + '\n');
+      } catch (err) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(id);
+        reject(err);
+      }
+    });
+  }
+
   public async reset(): Promise<any> {
     const id = 'reset-' + Date.now();
     return new Promise((resolve, reject) => {
@@ -807,6 +859,10 @@ ipcMain.handle('cas:sympy:status', async () => {
 
 ipcMain.handle('cas:sympy:eval', async (_event, { id, code }) => {
   return sympyManager.evaluate(id, code);
+});
+
+ipcMain.handle('cas:sympy:eval-ir', async (_event, { id, statements }) => {
+  return sympyManager.evaluateIr(id, statements);
 });
 
 ipcMain.handle('cas:sympy:reset', async () => {

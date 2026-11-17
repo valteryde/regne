@@ -1,23 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EngineProvider } from './context/EngineContext';
-import { DocumentProvider, useDocument } from './context/DocumentContext';
+import { DocumentProvider } from './context/DocumentContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { Toolbar } from './components/Toolbar/Toolbar';
 import { SidebarDrawer, SidebarTab } from './components/Sidebar/SidebarDrawer';
-import { MathDocument } from './components/Document/MathDocument';
-import { DocumentRuler } from './components/Ruler/DocumentRuler';
+import { SourcePage } from './components/SourcePage/SourcePage';
 import { ExportModal } from './components/Dialogs/ExportModal';
 import { SettingsModal } from './components/Dialogs/SettingsModal';
 import { UpdateNotification } from './components/Updater/UpdateNotification';
 import { VenvSetupBanner } from './components/Toolbar/VenvSetupBanner';
 
 const MainLayout: React.FC = () => {
-  const { isRulerVisible, rulerPosition } = useDocument();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(true);
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('outline');
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const documentScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Keyboard shortcut: Cmd+, or Ctrl+, opens Settings.
   // Cmd+Shift+B toggles the sidebar from the native menu.
@@ -31,7 +28,8 @@ const MainLayout: React.FC = () => {
         (target.tagName === 'MATH-FIELD' ||
           target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
-          target.isContentEditable);
+          target.isContentEditable ||
+          !!target.closest('[data-regne-source]'));
 
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
@@ -135,15 +133,7 @@ const MainLayout: React.FC = () => {
         />
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-[var(--bg-canvas)]">
-          {isRulerVisible && rulerPosition === 'top' && (
-            <DocumentRuler scrollRef={documentScrollRef} />
-          )}
-
-          <MathDocument containerRef={documentScrollRef} />
-
-          {isRulerVisible && rulerPosition === 'bottom' && (
-            <DocumentRuler scrollRef={documentScrollRef} />
-          )}
+          <SourcePage />
         </main>
       </div>
 

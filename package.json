@@ -31,6 +31,7 @@
     "katex": "^0.18.7",
     "lucide-react": "^1.44.0",
     "mathlive": "^0.110.0",
+    "monaco-editor": "^0.57.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
@@ -64,6 +65,10 @@
       {
         "from": "src/engine/sympyWorker.py",
         "to": "engine/sympyWorker.py"
+      },
+      {
+        "from": "src/engine/irEval.py",
+        "to": "engine/irEval.py"
       }
     ],
     "mac": {
