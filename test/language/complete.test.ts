@@ -7,8 +7,12 @@ describe("line color", () => {
     assert.equal(lineTone("# Charge in a cylinder"), "heading");
     assert.equal(lineTone("## Next"), "heading");
     assert.equal(lineTone("### Detail"), "heading");
-    assert.equal(lineTone("- The holdup is fixed."), "paragraph");
-    assert.equal(lineTone("  - Indented"), "paragraph");
+    assert.equal(lineTone("-- The holdup is fixed."), "paragraph");
+    assert.equal(lineTone("  -- Indented"), "paragraph");
+    assert.equal(lineTone("-5"), "statement");
+    assert.equal(lineTone("--x"), "statement");
+    assert.equal(lineTone("--5"), "statement");
+    assert.equal(lineTone("- The holdup is fixed."), "statement");
     assert.equal(lineTone("// a note"), "comment");
     assert.equal(lineTone("n := 2 [mol]"), "statement");
     assert.equal(lineTone("#title"), "statement");

@@ -15,7 +15,7 @@ describe("a legacy document", () => {
     });
     const imported = importLegacy(source);
     assert.match(imported.text, /^# Charge\n/);
-    assert.match(imported.text, /- The holdup is fixed\./);
+    assert.match(imported.text, /-- The holdup is fixed\./);
     assert.match(imported.text, /## A theorem/);
     assert.match(imported.text, /n := 2 \[mol\]/);
     assert.match(imported.text, /\/\/ \\frac/);

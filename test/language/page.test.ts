@@ -43,7 +43,7 @@ describe("the painted page", () => {
   });
 
   test("dollars in a paragraph typeset, and a call keeps the operator form", () => {
-    const source = "- The derivative of $x^2$ is taken next.\n- Then $diff(x^2, x)$ stays in the sentence.\n";
+    const source = "-- The derivative of $x^2$ is taken next.\n-- Then $diff(x^2, x)$ stays in the sentence.\n";
     const blocks = pageDocument(source, [], null);
     const paragraphs = blocks.filter((block) => block.kind === "paragraph");
     assert.equal(paragraphs.length, 2);
@@ -69,7 +69,7 @@ describe("the painted page", () => {
   });
 
   test("a constant value sits beside the expression, and a symbol does not repeat itself", () => {
-    const source = "- Twice $2 + 2$ and a square $x^2$.\n";
+    const source = "-- Twice $2 + 2$ and a square $x^2$.\n";
     const file = readDocument(source);
     const paragraph = file.blocks[0];
     assert.equal(paragraph.kind, "paragraph");
@@ -89,7 +89,7 @@ describe("the painted page", () => {
   });
 
   test("a selection inside the dollars lights that expression", () => {
-    const source = "- The square is $x^2$.\n";
+    const source = "-- The square is $x^2$.\n";
     const file = readDocument(source);
     const paragraph = file.blocks[0];
     if (paragraph.kind !== "paragraph" || !paragraph.math[0].parsed) return;
@@ -103,7 +103,7 @@ describe("the painted page", () => {
   });
 
   test("inline constants are evaluated in order, and a derivative is not", () => {
-    const source = "n := 2\n- Twice is $n + n$.\n- The derivative $diff(x^2, x)$ stays a form.\n";
+    const source = "n := 2\n-- Twice is $n + n$.\n-- The derivative $diff(x^2, x)$ stays a form.\n";
     const plan = evaluationPlan(readDocument(source).blocks);
     assert.deepEqual(
       plan.map((item) => item.role),
@@ -113,7 +113,7 @@ describe("the painted page", () => {
   });
 
   test("an unparsed dollar pair stays as text", () => {
-    const source = "- Broken $2x$ stays visible.\n";
+    const source = "-- Broken $2x$ stays visible.\n";
     const blocks = pageDocument(source, [], null);
     const paragraph = blocks[0];
     if (paragraph?.kind !== "paragraph") return;

@@ -32,7 +32,7 @@ export function lineTone(line: string): "heading" | "paragraph" | "comment" | "s
   const body = line.trimStart();
   if (body.startsWith("//")) return "comment";
   if (/^#{1,3} /.test(body)) return "heading";
-  if (body.startsWith("-")) return "paragraph";
+  if (body.startsWith("-- ")) return "paragraph";
   return "statement";
 }
 

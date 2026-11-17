@@ -28,17 +28,17 @@ A short file, `cylinder.regne`:
 ```regne
 # Charge in a cylinder
 
-- The holdup is fixed. Pressure and volume are measured.
+-- The holdup is fixed. Pressure and volume are measured.
 n := 2 [mol]
 P := 10 [bar]
 V := 66 [L]
 R := 8.314 [J/(mol*K)]
 T = P*V / (n*R)
 
-- The temperature follows from the ideal gas law.
+-- The temperature follows from the ideal gas law.
 ```
 
-`n := 2 [mol]` is a statement because nothing marks it otherwise. The page shows the heading and the paragraphs as text, without the `#` or the leading `-`. Each statement becomes a displayed line of mathematics, with its value underneath in the output color:
+`n := 2 [mol]` is a statement because nothing marks it otherwise. The page shows the heading and the paragraphs as text, without the `#` or the leading `--`. Each statement becomes a displayed line of mathematics, with its value underneath in the output color:
 
 - \( n := 2\,\mathrm{mol} \)
 - \( P := 10\,\mathrm{bar} \)
@@ -59,22 +59,22 @@ Leading whitespace does not change the kind of a line. After that, the first cha
 | empty | Nothing on the page. |
 | `//` and the rest of the line | A comment. Nothing on the page. |
 | `#`, `##`, or `###`, then a space, then a title | A heading. One, two, or three hashes are the level. The marker is not printed. |
-| `-`, then the paragraph | Text. A single space after the dash is skipped. The dash is not printed. |
+| `--`, then a space, then the paragraph | Text. That space is skipped. The dashes are not printed. |
 | anything else | A Regne statement. |
 
 A statement may continue onto the next physical line by ending with `\`. The continuation is still a statement. A heading or a paragraph does not continue that way. One paragraph is one line.
 
-`-` is how prose enters the file. It is not a bullet list. The page prints it as a paragraph.
+`-- ` is how prose enters the file. The page prints it as a paragraph. A minus still starts a statement, so `-5`, `--5`, and `--x` are mathematics.
 
 Inside a paragraph, `$` and `$` wrap one expression. That expression typesets in the sentence. It evaluates when it has a constant value, and the value may sit inline beside it. A call such as `$diff(x^2, x)$` typesets the operator form and does not grow a solved line inside the sentence. `$` has no meaning in a statement. A statement that needs a dollar sign is out of scope.
 
 ```regne
 # Charge in a cylinder
 
-- The holdup is fixed.
+-- The holdup is fixed.
 n := 2 [mol]
 
-- The derivative of $x^2$ is taken next.
+-- The derivative of $x^2$ is taken next.
 diff(x^2, x)
 ```
 
@@ -301,7 +301,7 @@ The language and the highlight are usable before headings are painted on the pag
 - Editing the painted equation.
 - A MathLive field, a ribbon, or a symbol drawer.
 - Highlighting inside a computed result.
-- Bullet lists, emphasis, and links. A `-` line is a paragraph.
+- Bullet lists, emphasis, and links. A paragraph is a line that starts with `-- `.
 - Units inside `diff`, `integrate`, and `solve`, until the dimensionless path and the quantity path are both dull.
 - Running arbitrary Python.
 - A PDF preview. The page is HTML. PDF can be a later export.

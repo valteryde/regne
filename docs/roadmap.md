@@ -4,7 +4,7 @@ Work through these phases in order. Each phase has a finish line. Do not start t
 
 The language, the highlight rule, and the two panes are defined in [spec.md](spec.md). This file is the order of work. When the two disagree, the spec wins.
 
-The app today is a page of MathLive rows, a ribbon, and a sidebar. The worker in `src/engine/sympyWorker.py` evaluates a string with SymPy. That worker stays. MathLive, the ribbon, and the palettes come out only after a text `.regne` file opens in the new panes. A bare line is a statement. A heading starts with `#`. A paragraph starts with `-`.
+The app today is a page of MathLive rows, a ribbon, and a sidebar. The worker in `src/engine/sympyWorker.py` evaluates a string with SymPy. That worker stays. MathLive, the ribbon, and the palettes come out only after a text `.regne` file opens in the new panes. A bare line is a statement. A heading starts with `#`. A paragraph starts with `-- `.
 
 ## Decisions that the rest of the work assumes
 
@@ -56,7 +56,7 @@ Leave out the document, the cache, and debounce. This phase evaluates one statem
 
 ## Phase 3. The file, and the two panes
 
-`src/language/document.ts` classifies each line of a `.regne` buffer the way spec section 3 says. A bare line is a statement. `#` is a heading. `-` is a paragraph. `//` is a comment. It records a file span for every block and every statement. `$...$` inside a paragraph is its own span. A trailing `\` joins statement lines before parse.
+`src/language/document.ts` classifies each line of a `.regne` buffer the way spec section 3 says. A bare line is a statement. `#` is a heading. `-- ` is a paragraph. `//` is a comment. It records a file span for every block and every statement. `$...$` inside a paragraph is its own span. A trailing `\` joins statement lines before parse.
 
 The shell replaces `MathDocument` as the body of `App.tsx`:
 
@@ -87,11 +87,11 @@ Finish line: in the cylinder note, selecting `P*V` lights only the product in th
 
 ## Phase 5. Headings and paragraphs on the page
 
-Paint the markers away. A `#` line becomes a heading at its level. A `-` line becomes a paragraph, without the dash. `$...$` inside that paragraph typesets inline, under the rules in spec section 3. Statements stay displays.
+Paint the markers away. A `#` line becomes a heading at its level. A `-- ` line becomes a paragraph, without the dashes. `$...$` inside that paragraph typesets inline, under the rules in spec section 3. Statements stay displays.
 
 The document tree used here is the same tree export will walk later.
 
-Finish line: the cylinder note shows the heading and both paragraphs as a page, with the five displays between them. The characters `#` and `-` do not appear on the page.
+Finish line: the cylinder note shows the heading and both paragraphs as a page, with the five displays between them. The markers `#` and `--` do not appear on the page.
 
 ## Phase 6. Scroll sync
 
@@ -107,7 +107,7 @@ Export walks the phase 5 document tree. Math uses `toLatex(node, null)`. A headi
 
 Completion offers the core names from spec section 4.6, and Pint unit names when the caret is inside unit brackets. Monaco colors a heading, a paragraph prefix, and a statement differently.
 
-Import reads a legacy JSON `.regne` file, recognized by a leading `{`, into the text language: text becomes `-` lines, math `input` becomes a bare statement, sections become `#` lines. The import is lossy where the old file stored LaTeX that is not the new language, and it says so rather than inventing a translation.
+Import reads a legacy JSON `.regne` file, recognized by a leading `{`, into the text language: text becomes `-- ` lines, math `input` becomes a bare statement, sections become `#` lines. The import is lossy where the old file stored LaTeX that is not the new language, and it says so rather than inventing a translation.
 
 Then remove the unused editor: MathLive, the ribbons, the palettes, the per-line mode switch, and the section widgets. Settings for the engine and the Python environment stay. The menu keeps file, edit, and export. It loses insert-math and the sidebar chords that existed for the palettes.
 

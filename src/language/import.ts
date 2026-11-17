@@ -53,7 +53,7 @@ export function importLegacy(source: string): LegacyImport {
       const plain = stripTags(raw);
       for (const line of plain.split(/\r?\n/)) {
         const sentence = line.trim();
-        if (sentence) lines.push(`- ${sentence}`);
+        if (sentence) lines.push(`-- ${sentence}`);
       }
       continue;
     }

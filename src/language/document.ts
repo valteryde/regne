@@ -3,14 +3,14 @@ import { ParseError, Parsed, parseStatement } from "./parse";
 
 export const CYLINDER_NOTE = `# Charge in a cylinder
 
-- The holdup is fixed. Pressure and volume are measured.
+-- The holdup is fixed. Pressure and volume are measured.
 n := 2 [mol]
 P := 10 [bar]
 V := 66 [L]
 R := 8.314 [J/(mol*K)]
 T = P*V / (n*R)
 
-- The temperature follows from the ideal gas law.
+-- The temperature follows from the ideal gas law.
 `;
 
 export interface InlineMath {
@@ -79,7 +79,7 @@ function classify(source: string): Block[] {
       });
       continue;
     }
-    if (body.startsWith("-")) {
+    if (body.startsWith("-- ")) {
       blocks.push(paragraph(line, contentStart, body));
       continue;
     }
@@ -95,17 +95,13 @@ function classify(source: string): Block[] {
 }
 
 function paragraph(line: Line, contentStart: number, body: string): Extract<Block, { kind: "paragraph" }> {
-  let text = body.slice(1);
-  let textStart = contentStart + 1;
-  if (text.startsWith(" ")) {
-    text = text.slice(1);
-    textStart += 1;
-  }
+  const text = body.slice(3);
+  const textStart = contentStart + 3;
   return {
     kind: "paragraph",
     text,
     span: { start: line.start, end: line.end },
-    marker: { start: contentStart, end: contentStart + 1 },
+    marker: { start: contentStart, end: contentStart + 2 },
     math: inlineMath(text, textStart),
   };
 }

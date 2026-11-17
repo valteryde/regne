@@ -19,11 +19,11 @@ describe("LaTeX export", () => {
     assert.equal(tex.includes("htmlData"), false);
     assert.equal(tex.includes("regne-hit"), false);
     assert.equal(tex.includes("\n# "), false);
-    assert.equal(tex.includes("\n- "), false);
+    assert.equal(tex.includes("\n-- "), false);
   });
 
   test("a paragraph inlines its expression, and a derivative keeps the operator", () => {
-    const tex = exportLatex("- The square $x^2$ and $diff(x^2, x)$.\n## Next\n");
+    const tex = exportLatex("-- The square $x^2$ and $diff(x^2, x)$.\n## Next\n");
     assert.match(tex, /The square \$x\^\{2\}\$/);
     assert.match(tex, /\\dfrac\{d\}\{dx\}/);
     assert.match(tex, /\\subsection\{Next\}/);

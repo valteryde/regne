@@ -29,7 +29,7 @@ describe("readDocument", () => {
     const prose = file.blocks.filter((block) => block.kind === "paragraph");
     assert.equal(prose.length, 2);
     if (prose[0].kind === "paragraph") {
-      assert.equal(prose[0].text.startsWith("-"), false);
+      assert.equal(CYLINDER_NOTE.slice(prose[0].marker.start, prose[0].marker.end), "--");
       assert.match(prose[0].text, /^The holdup/);
     }
   });
@@ -46,14 +46,24 @@ describe("readDocument", () => {
     assert.equal(file.blocks[4].kind, "statement");
   });
 
-  test("a dash is a paragraph, and one space after it is not part of the text", () => {
-    const file = readDocument("- The holdup is fixed.\n-No space\n");
+  test("two dashes and a space are a paragraph, and a minus stays a statement", () => {
+    const source = "-- The holdup is fixed.\n--No space\n-5\n--x\n--5\n- The holdup\n";
+    const file = readDocument(source);
     const first = file.blocks[0];
-    const second = file.blocks[1];
     assert.equal(first.kind, "paragraph");
-    assert.equal(second.kind, "paragraph");
-    if (first.kind === "paragraph") assert.equal(first.text, "The holdup is fixed.");
-    if (second.kind === "paragraph") assert.equal(second.text, "No space");
+    if (first.kind === "paragraph") {
+      assert.equal(first.text, "The holdup is fixed.");
+      assert.equal(source.slice(first.marker.start, first.marker.end), "--");
+    }
+    assert.deepEqual(
+      file.blocks.slice(1).map((block) => block.kind),
+      ["statement", "statement", "statement", "statement", "statement"],
+    );
+    if (file.blocks[1].kind === "statement") assert.ok(file.blocks[1].error);
+    for (const block of [file.blocks[2], file.blocks[3], file.blocks[4]]) {
+      if (block.kind === "statement") assert.equal(block.error, null);
+    }
+    if (file.blocks[5].kind === "statement") assert.ok(file.blocks[5].error);
   });
 
   test("comments and blank lines are not statements", () => {
@@ -69,7 +79,7 @@ describe("readDocument", () => {
   });
 
   test("leading whitespace does not change the kind", () => {
-    assert.deepEqual(kinds("  # Title\n\t- Paragraph\n  n := 1\n"), ["heading", "paragraph", "statement"]);
+    assert.deepEqual(kinds("  # Title\n\t-- Paragraph\n  n := 1\n"), ["heading", "paragraph", "statement"]);
   });
 
   test("a trailing backslash joins a statement and not a paragraph", () => {
@@ -82,7 +92,7 @@ describe("readDocument", () => {
       assert.equal(joined.blocks[0].source, "a + \\\nb");
     }
 
-    const prose = readDocument("- stays one line \\\nnext\n");
+    const prose = readDocument("-- stays one line \\\nnext\n");
     assert.deepEqual(
       prose.blocks.map((block) => block.kind),
       ["paragraph", "statement"],
@@ -90,7 +100,8 @@ describe("readDocument", () => {
   });
 
   test("dollars inside a paragraph are an expression, and a bare dollar line is a statement", () => {
-    const file = readDocument("- The derivative of $x^2$ is taken next.\n$x$\n");
+    const source = "-- The derivative of $x^2$ is taken next.\n$x$\n";
+    const file = readDocument(source);
     const paragraph = file.blocks[0];
     assert.equal(paragraph.kind, "paragraph");
     if (paragraph.kind !== "paragraph") return;
@@ -98,16 +109,13 @@ describe("readDocument", () => {
     assert.equal(paragraph.math[0].source, "x^2");
     assert.equal(paragraph.math[0].error, null);
     assert.equal(paragraph.math[0].parsed?.node.type, "binary");
-    const slice = "- The derivative of $x^2$ is taken next.".slice(
-      paragraph.math[0].span.start,
-      paragraph.math[0].span.end,
-    );
+    const slice = source.slice(paragraph.math[0].span.start, paragraph.math[0].span.end);
     assert.equal(slice, "$x^2$");
     assert.equal(file.blocks[1].kind, "statement");
   });
 
   test("an unclosed dollar stays text", () => {
-    const file = readDocument("- price is $12\n");
+    const file = readDocument("-- price is $12\n");
     const paragraph = file.blocks[0];
     assert.equal(paragraph.kind, "paragraph");
     if (paragraph.kind === "paragraph") assert.equal(paragraph.math.length, 0);
