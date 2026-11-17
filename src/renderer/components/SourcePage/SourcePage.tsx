@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { KeyCode, KeyMod, Range, editor } from "monaco-editor/editor/editor.api";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor-css";
+// editor.api omits these. Without them Option (Mac) and Ctrl (Windows) plus an arrow
+// never stop at the next word, the way they do in VS Code. The part chords stop at
+// the next camelCase or underscore section.
+import "monaco-editor/editor/contrib/wordOperations/browser/wordOperations.js";
+import "monaco-editor/editor/contrib/wordPartOperations/browser/wordPartOperations.js";
 import { unitInsert } from "../../../language/complete";
 import { CYLINDER_NOTE, isLegacyDocument, readDocument } from "../../../language/document";
 import { importLegacy } from "../../../language/import";
