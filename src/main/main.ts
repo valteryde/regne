@@ -998,7 +998,6 @@ let updaterState: UpdaterState = {
   error: null,
 };
 
-let isManualCheck = false;
 let lastDiscoveredUpdateInfo: any = null;
 
 function applyUpdateAndRestart(): void {
@@ -1023,19 +1022,6 @@ function handleUpdaterError(err: any) {
   const errorMsg = err?.message ?? String(err);
   console.error('[AutoUpdater] Error:', errorMsg);
   broadcastUpdaterState({ status: 'error', error: errorMsg });
-
-  if (isManualCheck) {
-    isManualCheck = false;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: 'Update Check Failed',
-        message: 'Could not complete update check or download.',
-        detail: errorMsg,
-        buttons: ['OK'],
-      });
-    }
-  }
 }
 
 function startDownloadUpdate() {
@@ -1064,24 +1050,6 @@ function startDownloadUpdate() {
         };
         broadcastUpdaterState({ status: 'downloaded', info: infoPayload, error: null });
         mainWindow?.webContents.send('updater:update-downloaded', infoPayload);
-
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          dialog
-            .showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'Update Ready',
-              message: `Regne v${version} has been downloaded.`,
-              detail: 'Restart the application now to apply the update.',
-              buttons: ['Restart Now', 'Later'],
-              defaultId: 0,
-              cancelId: 1,
-            })
-            .then(({ response }) => {
-              if (response === 0) {
-                applyUpdateAndRestart();
-              }
-            });
-        }
       })
       .catch((err: any) => {
         handleUpdaterError(err);
@@ -1096,19 +1064,15 @@ function startDownloadUpdate() {
 
 async function performUpdateCheck(manual = true) {
   if (isDev) {
-    if (manual && mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: 'Check for Updates',
-        message: 'Update checks are disabled in development mode.',
-        detail: `Running development build (v${app.getVersion()}). Updates are checked automatically in packaged releases.`,
-        buttons: ['OK'],
+    if (manual) {
+      broadcastUpdaterState({
+        status: 'error',
+        error: `Update checks are disabled in development mode (v${app.getVersion()}).`,
       });
     }
     return;
   }
 
-  isManualCheck = manual;
   broadcastUpdaterState({ status: 'checking', error: null });
 
   try {
@@ -1255,46 +1219,11 @@ function setupAutoUpdater(): void {
     };
     broadcastUpdaterState({ status: 'available', info: infoPayload, error: null });
     mainWindow?.webContents.send('updater:update-available', infoPayload);
-
-    if (isManualCheck) {
-      isManualCheck = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        const promptQuestion = 'Would you like to download and install this update now?';
-        const detail = formattedNotes
-          ? `${formattedNotes}\n\n${promptQuestion}`
-          : promptQuestion;
-
-        dialog.showMessageBox(mainWindow, {
-          type: 'info',
-          title: 'Update Available',
-          message: `A new version of Regne is available (v${info.version}).`,
-          detail,
-          buttons: ['Download Update', 'Later'],
-          defaultId: 0,
-          cancelId: 1,
-        }).then(({ response }) => {
-          if (response === 0) {
-            startDownloadUpdate();
-          }
-        });
-      }
-    }
   });
 
   autoUpdater.on('update-not-available', (info) => {
     console.log('[AutoUpdater] No update available. Current version:', info.version);
     broadcastUpdaterState({ status: 'not-available', info: { version: info.version }, error: null });
-    if (isManualCheck) {
-      isManualCheck = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        dialog.showMessageBox(mainWindow, {
-          type: 'info',
-          title: 'No Updates Available',
-          message: `You are running the latest version of Regne (v${info.version}).`,
-          buttons: ['OK'],
-        });
-      }
-    }
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
@@ -1321,22 +1250,6 @@ function setupAutoUpdater(): void {
     };
     broadcastUpdaterState({ status: 'downloaded', info: infoPayload, error: null });
     mainWindow?.webContents.send('updater:update-downloaded', infoPayload);
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: 'Update Ready',
-        message: `Regne v${info.version} has been downloaded.`,
-        detail: 'Restart the application now to apply the update.',
-        buttons: ['Restart Now', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-      }).then(({ response }) => {
-        if (response === 0) {
-          applyUpdateAndRestart();
-        }
-      });
-    }
   });
 
   autoUpdater.on('error', (err) => {
