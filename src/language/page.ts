@@ -115,6 +115,16 @@ export function evaluationPlan(blocks: Block[]): PlanItem[] {
   return items;
 }
 
+/** The block that owns a file offset. A caret on the block's end still belongs to it. */
+export function anchorAt(blocks: PageBlock[], offset: number): PageBlock | null {
+  let nearest: PageBlock | null = null;
+  for (const block of blocks) {
+    if (block.start <= offset && offset <= block.end) return block;
+    if (block.start <= offset) nearest = block;
+  }
+  return nearest ?? blocks[0] ?? null;
+}
+
 /** The visible characters of a painted page, markers already removed. */
 export function pageText(blocks: PageBlock[]): string {
   return blocks

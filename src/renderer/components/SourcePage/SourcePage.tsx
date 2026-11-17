@@ -25,6 +25,7 @@ import { useDocument } from "../../context/DocumentContext";
 import { publishSourceLabel, registerSourceCommands } from "../../sourceCommands";
 import { evaluateIr } from "./evaluateIr";
 import { readPointer } from "./pointer";
+import { blockAtTop, blockForOffset, scrollBlockIntoPage } from "./scroll";
 import { Sheet } from "./Sheet";
 
 const SOURCE_KEY = "regne:source-buffer";
@@ -110,6 +111,7 @@ export const SourcePage: React.FC = () => {
   const selectionRef = useRef<Span | null>(null);
   const dragging = useRef(false);
   const touched = useRef<Span[]>([]);
+  const syncLock = useRef(0);
 
   const [source, setSource] = useState(sourceRef.current);
   const [path, setPath] = useState<string | null>(pathRef.current);
@@ -324,6 +326,72 @@ export const SourcePage: React.FC = () => {
     };
     // The editor is created once. Later text arrives through applyText.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const codeEditor = editorRef.current;
+    const page = document.querySelector<HTMLElement>("[data-regne-page]");
+    if (!codeEditor || !page) return;
+    const span = selectionRef.current;
+    if (!span) return;
+    const block = blockForOffset(page, span.start);
+    if (!block) return;
+    syncLock.current += 1;
+    scrollBlockIntoPage(page, block);
+    const model = codeEditor.getModel();
+    if (model) {
+      const position = model.getPositionAt(Math.min(span.start, model.getValueLength()));
+      codeEditor.revealPositionInCenterIfOutsideViewport(position);
+    }
+    let released = false;
+    const release = window.requestAnimationFrame(() => {
+      released = true;
+      syncLock.current = Math.max(0, syncLock.current - 1);
+    });
+    return () => {
+      window.cancelAnimationFrame(release);
+      if (!released) syncLock.current = Math.max(0, syncLock.current - 1);
+    };
+  }, [source, selection]);
+
+  useEffect(() => {
+    const codeEditor = editorRef.current;
+    const page = document.querySelector<HTMLElement>("[data-regne-page]");
+    if (!codeEditor || !page) return;
+    const hold = () => {
+      syncLock.current += 1;
+      window.requestAnimationFrame(() => {
+        syncLock.current = Math.max(0, syncLock.current - 1);
+      });
+    };
+    const revealCaret = () => {
+      if (syncLock.current) return;
+      const span = selectionOf(codeEditor);
+      if (!span) return;
+      const block = blockForOffset(page, span.start);
+      if (!block) return;
+      hold();
+      scrollBlockIntoPage(page, block);
+    };
+    const revealEditor = () => {
+      if (syncLock.current) return;
+      if (page.scrollHeight <= page.clientHeight) return;
+      const block = blockAtTop(page);
+      const start = Number(block?.getAttribute("data-regne-start"));
+      const model = codeEditor.getModel();
+      if (!block || !model || !Number.isFinite(start)) return;
+      hold();
+      const position = model.getPositionAt(Math.min(start, model.getValueLength()));
+      codeEditor.revealPositionInCenterIfOutsideViewport(position);
+    };
+    const cursor = codeEditor.onDidChangeCursorPosition(revealCaret);
+    const scrolled = codeEditor.onDidScrollChange(revealCaret);
+    page.addEventListener("scroll", revealEditor);
+    return () => {
+      cursor.dispose();
+      scrolled.dispose();
+      page.removeEventListener("scroll", revealEditor);
+    };
   }, []);
 
   useEffect(() => {

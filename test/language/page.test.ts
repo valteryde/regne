@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import { CYLINDER_NOTE, readDocument } from "../../src/language/document";
 import { FreshValue } from "../../src/language/displays";
 import { paint } from "../../src/language/session";
-import { constantLatex, evaluationPlan, pageDocument, pageText } from "../../src/language/page";
+import { anchorAt, constantLatex, evaluationPlan, pageDocument, pageText } from "../../src/language/page";
 
 const TEMPERATURE: FreshValue = { latex: "3969.21\\,\\mathrm{K}", kind: "quantity" };
 
@@ -35,6 +35,11 @@ describe("the painted page", () => {
     const visible = pageText(blocks);
     assert.equal(visible.includes("#"), false);
     assert.equal(visible.includes("-"), false);
+    const closing = paragraphs[1];
+    if (closing?.kind === "paragraph") {
+      assert.equal(anchorAt(blocks, closing.caret), closing);
+      assert.equal(CYLINDER_NOTE.slice(closing.caret, closing.caret + 15), "The temperature");
+    }
   });
 
   test("dollars in a paragraph typeset, and a call keeps the operator form", () => {
