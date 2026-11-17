@@ -25,6 +25,7 @@ import {
 import { useDocument } from "../../context/DocumentContext";
 import { publishSourceLabel, registerSourceCommands } from "../../sourceCommands";
 import { evaluateIr } from "./evaluateIr";
+import { registerRegneLanguage } from "./language";
 import { readPointer } from "./pointer";
 import { blockAtTop, blockForOffset, scrollBlockIntoPage } from "./scroll";
 import { Sheet } from "./Sheet";
@@ -280,10 +281,11 @@ export const SourcePage: React.FC = () => {
     alive.current = true;
     const node = hostRef.current;
     if (!node) return;
+    registerRegneLanguage();
     const codeEditor = editor.create(node, {
       value: sourceRef.current,
-      language: "plaintext",
-      theme: "vs",
+      language: "regne",
+      theme: "regne",
       fontSize: 13,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       minimap: { enabled: false },
