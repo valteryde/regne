@@ -1,7 +1,9 @@
 import React from "react";
 import { StatementDisplay } from "../../../language/displays";
 import { pageRows } from "../../../language/session";
+import { PointerTarget } from "../../../language/selection";
 import { KaTeXRenderer } from "../Worksheet/KaTeXRenderer";
+import { readPointer } from "./pointer";
 
 interface SheetProps {
   source: string;
@@ -14,6 +16,7 @@ interface SheetProps {
   marginLeft: number;
   marginRight: number;
   onMouseDown?: () => void;
+  onPointerDown?: (pointer: PointerTarget) => void;
 }
 
 export const Sheet: React.FC<SheetProps> = ({
@@ -27,6 +30,7 @@ export const Sheet: React.FC<SheetProps> = ({
   marginLeft,
   marginRight,
   onMouseDown,
+  onPointerDown,
 }) => {
   const rows = pageRows(source, displays);
   const width = paperWidth * 96;
@@ -41,6 +45,7 @@ export const Sheet: React.FC<SheetProps> = ({
         if (event.button !== 0) return;
         event.preventDefault();
         onMouseDown?.();
+        onPointerDown?.(readPointer(event.target));
       }}
     >
       <div className="flex justify-center py-6 px-4" style={{ minWidth: "100%" }}>
@@ -103,7 +108,9 @@ export const Sheet: React.FC<SheetProps> = ({
                   {display?.valueSvg ? (
                     <div data-regne-plot className="my-2" dangerouslySetInnerHTML={{ __html: display.valueSvg }} />
                   ) : display?.valueLatex ? (
-                    <KaTeXRenderer math={display.valueLatex} />
+                    <div data-regne-value>
+                      <KaTeXRenderer math={display.valueLatex} />
+                    </div>
                   ) : null}
                   {display?.error ? (
                     <p data-regne-error className="text-sm text-red-700 mt-1">

@@ -136,6 +136,10 @@ math-field::part(menu-toggle) {
   background-color: #fde8e8;
 }
 
+.regne-hit {
+  background-color: var(--selection-bg);
+}
+
 .regne-placeholder:empty::before {
   content: attr(data-placeholder);
   color: var(--text-muted);

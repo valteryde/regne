@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Range, editor } from "monaco-editor/editor/editor.api";
+import { KeyCode, KeyMod, Range, editor } from "monaco-editor/editor/editor.api";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor-css";
 import { CYLINDER_NOTE, readDocument } from "../../../language/document";
@@ -13,9 +13,18 @@ import {
   runnableStatements,
   storeValues,
 } from "../../../language/session";
+import { Span } from "../../../language/ast";
+import {
+  PointerTarget,
+  paintSelection,
+  selectionFromPointer,
+  stepSelection,
+  unionSpan,
+} from "../../../language/selection";
 import { useDocument } from "../../context/DocumentContext";
 import { publishSourceLabel, registerSourceCommands } from "../../sourceCommands";
 import { evaluateIr } from "./evaluateIr";
+import { readPointer } from "./pointer";
 import { Sheet } from "./Sheet";
 
 const SOURCE_KEY = "regne:source-buffer";
@@ -53,6 +62,26 @@ function suggestedName(text: string): string {
   return `${slug || "Untitled"}.regne`;
 }
 
+function selectionOf(codeEditor: editor.IStandaloneCodeEditor): Span | null {
+  const model = codeEditor.getModel();
+  const selected = codeEditor.getSelection();
+  if (!model || !selected) return null;
+  const start = model.getOffsetAt({ lineNumber: selected.startLineNumber, column: selected.startColumn });
+  const end = model.getOffsetAt({ lineNumber: selected.endLineNumber, column: selected.endColumn });
+  return { start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+function selectSpan(codeEditor: editor.IStandaloneCodeEditor, span: Span): void {
+  const model = codeEditor.getModel();
+  if (!model) return;
+  const length = model.getValueLength();
+  const start = model.getPositionAt(Math.min(span.start, length));
+  const end = model.getPositionAt(Math.min(span.end, length));
+  const range = new Range(start.lineNumber, start.column, end.lineNumber, end.column);
+  codeEditor.setSelection(range);
+  codeEditor.revealRangeInCenterIfOutsideViewport(range);
+}
+
 function documentTitle(text: string, filePath: string | null): string {
   if (filePath) return filePath.split(/[/\\]/).pop() || "Untitled.regne";
   const heading = readDocument(text).blocks.find((block) => block.kind === "heading");
@@ -72,6 +101,9 @@ export const SourcePage: React.FC = () => {
   const pathRef = useRef<string | null>(storedPath());
   const savedRef = useRef(sourceRef.current);
   const alive = useRef(true);
+  const selectionRef = useRef<Span | null>(null);
+  const dragging = useRef(false);
+  const touched = useRef<Span[]>([]);
 
   const [source, setSource] = useState(sourceRef.current);
   const [path, setPath] = useState<string | null>(pathRef.current);
@@ -118,7 +150,7 @@ export const SourcePage: React.FC = () => {
       }
     }
     if (!alive.current || token !== generation.current) return;
-    const next = paint(text, values ?? [], displaysRef.current);
+    const next = paintSelection(text, paint(text, values ?? [], displaysRef.current), selectionRef.current);
     displaysRef.current = next;
     setLegacy(false);
     setPending(false);
@@ -147,10 +179,10 @@ export const SourcePage: React.FC = () => {
   };
 
   const applyText = (text: string, filePath: string | null) => {
+    sourceRef.current = text;
     applying.current = true;
     editorRef.current?.setValue(text);
     applying.current = false;
-    sourceRef.current = text;
     pathRef.current = filePath;
     savedRef.current = text;
     setSource(text);
@@ -233,6 +265,14 @@ export const SourcePage: React.FC = () => {
       scrollBeyondLastColumn: 0,
     });
     editorRef.current = codeEditor;
+    const paintEditorSelection = () => {
+      const span = selectionOf(codeEditor);
+      selectionRef.current = span;
+      const next = paintSelection(sourceRef.current, displaysRef.current, span);
+      if (next === displaysRef.current) return;
+      displaysRef.current = next;
+      setDisplays(next);
+    };
     const subscription = codeEditor.onDidChangeModelContent(() => {
       if (applying.current) return;
       const text = codeEditor.getValue();
@@ -245,6 +285,16 @@ export const SourcePage: React.FC = () => {
         void recomputeRef.current(text);
       });
     });
+    const selectionSubscription = codeEditor.onDidChangeCursorSelection(paintEditorSelection);
+    const nudge = (direction: "parent" | "child") => {
+      const current = selectionOf(codeEditor);
+      if (!current) return;
+      const next = stepSelection(sourceRef.current, current, direction);
+      if (!next) return;
+      selectSpan(codeEditor, next);
+    };
+    codeEditor.addCommand(KeyMod.Alt | KeyCode.UpArrow, () => nudge("parent"));
+    codeEditor.addCommand(KeyMod.Alt | KeyCode.DownArrow, () => nudge("child"));
     codeEditor.focus();
     void recomputeRef.current(sourceRef.current);
     return () => {
@@ -252,12 +302,45 @@ export const SourcePage: React.FC = () => {
       generation.current += 1;
       pauseRef.current.cancel();
       subscription.dispose();
+      selectionSubscription.dispose();
       codeEditor.dispose();
       editorRef.current = null;
     };
     // The editor is created once. Later text arrives through applyText.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const move = (event: MouseEvent) => {
+      if (!dragging.current) return;
+      const codeEditor = editorRef.current;
+      if (!codeEditor) return;
+      const span = selectionFromPointer(sourceRef.current, readPointer(document.elementFromPoint(event.clientX, event.clientY)));
+      if (!span) return;
+      touched.current.push(span);
+      const union = unionSpan(touched.current);
+      if (union) selectSpan(codeEditor, union);
+    };
+    const up = () => {
+      dragging.current = false;
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, []);
+
+  const beginPointer = (pointer: PointerTarget) => {
+    const codeEditor = editorRef.current;
+    if (!codeEditor) return;
+    const span = selectionFromPointer(sourceRef.current, pointer);
+    if (!span) return;
+    dragging.current = true;
+    touched.current = [span];
+    selectSpan(codeEditor, span);
+  };
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -322,6 +405,7 @@ export const SourcePage: React.FC = () => {
           marginLeft={pageMargins.left}
           marginRight={pageMargins.right}
           onMouseDown={() => editorRef.current?.focus()}
+          onPointerDown={beginPointer}
         />
       </div>
       <span className="sr-only" data-dirty={dirty ? "true" : "false"} />
