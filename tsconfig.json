@@ -19,5 +19,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/renderer", "src/engine", "src/types"]
+  "include": ["src/renderer", "src/engine", "src/types", "src/language"]
 }
