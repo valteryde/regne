@@ -12,6 +12,7 @@ interface SheetProps {
   selection: Span | null;
   inlineValues: ReadonlyMap<number, FreshValue>;
   legacy: boolean;
+  notice: string | null;
   engineError: string | null;
   pending: boolean;
   paperWidth: number;
@@ -28,6 +29,7 @@ export const Sheet: React.FC<SheetProps> = ({
   selection,
   inlineValues,
   legacy,
+  notice,
   engineError,
   pending,
   paperWidth,
@@ -68,7 +70,12 @@ export const Sheet: React.FC<SheetProps> = ({
               paddingBottom: "4rem",
             }}
           >
-            {legacy && (
+            {notice && (
+              <p data-regne-import className="font-serif text-sm mb-4 text-[var(--text-muted)]">
+                {notice}
+              </p>
+            )}
+            {legacy && !notice && (
               <p data-regne-legacy className="font-serif text-base mb-4">
                 This file is a legacy document. It stays as text until it can be imported.
               </p>

@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { KeyCode, KeyMod, Range, editor } from "monaco-editor/editor/editor.api";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor-css";
-import { CYLINDER_NOTE, readDocument } from "../../../language/document";
+import { CYLINDER_NOTE, isLegacyDocument, readDocument } from "../../../language/document";
+import { importLegacy } from "../../../language/import";
 import { FreshValue, StatementDisplay } from "../../../language/displays";
 import {
   RECOMPUTE_PAUSE_MS,
@@ -47,6 +48,12 @@ function storedSource(): string {
     // A private window has no storage. The note is still the default file.
   }
   return CYLINDER_NOTE;
+}
+
+function openBuffer(saved: string): { text: string; notice: string | null } {
+  if (!isLegacyDocument(saved)) return { text: saved, notice: null };
+  const imported = importLegacy(saved);
+  return { text: imported.text, notice: imported.notes.join(" ") || null };
 }
 
 function storedPath(): string | null {
@@ -106,7 +113,8 @@ export const SourcePage: React.FC = () => {
   const generation = useRef(0);
   const cacheRef = useRef(new Map<string, FreshValue>());
   const displaysRef = useRef<StatementDisplay[]>([]);
-  const sourceRef = useRef(storedSource());
+  const opened = useRef(openBuffer(storedSource()));
+  const sourceRef = useRef(opened.current.text);
   const pathRef = useRef<string | null>(storedPath());
   const savedRef = useRef(sourceRef.current);
   const alive = useRef(true);
@@ -122,6 +130,7 @@ export const SourcePage: React.FC = () => {
   const [selection, setSelection] = useState<Span | null>(null);
   const [inlineValues, setInlineValues] = useState<ReadonlyMap<number, FreshValue>>(new Map());
   const [legacy, setLegacy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(opened.current.notice);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
 
@@ -198,6 +207,9 @@ export const SourcePage: React.FC = () => {
   };
 
   const applyText = (text: string, filePath: string | null) => {
+    const openedFile = openBuffer(text);
+    text = openedFile.text;
+    setNotice(openedFile.notice);
     sourceRef.current = text;
     applying.current = true;
     editorRef.current?.setValue(text);
@@ -503,6 +515,7 @@ export const SourcePage: React.FC = () => {
           source={source}
           displays={displays}
           legacy={legacy}
+          notice={notice}
           engineError={engineError}
           pending={pending}
           paperWidth={paperWidth}
