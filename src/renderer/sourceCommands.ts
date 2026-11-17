@@ -51,10 +51,12 @@ export function useSourceLabel(): SourceLabel | null {
 type CommandHandler = (command: SourceCommand) => void;
 type OpenHandler = (content: string, filePath: string) => void;
 type RevealHandler = (offset: number) => void;
+type InsertHandler = (name: string) => void;
 
 let onCommand: CommandHandler | null = null;
 let onOpen: OpenHandler | null = null;
 let onReveal: RevealHandler | null = null;
+let onInsert: InsertHandler | null = null;
 
 export function sourceCommandsActive(): boolean {
   return onCommand != null;
@@ -64,15 +66,22 @@ export function registerSourceCommands(
   handler: CommandHandler,
   open: OpenHandler,
   reveal: RevealHandler,
+  insert: InsertHandler,
 ): () => void {
   onCommand = handler;
   onOpen = open;
   onReveal = reveal;
+  onInsert = insert;
   return () => {
     if (onCommand === handler) onCommand = null;
     if (onOpen === open) onOpen = null;
     if (onReveal === reveal) onReveal = null;
+    if (onInsert === insert) onInsert = null;
   };
+}
+
+export function insertSource(name: string): void {
+  onInsert?.(name);
 }
 
 export function revealSource(offset: number): void {

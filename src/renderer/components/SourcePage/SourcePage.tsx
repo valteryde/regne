@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { KeyCode, KeyMod, Range, editor } from "monaco-editor/editor/editor.api";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor-css";
+import { unitInsert } from "../../../language/complete";
 import { CYLINDER_NOTE, isLegacyDocument, readDocument } from "../../../language/document";
 import { importLegacy } from "../../../language/import";
 import { FreshValue, StatementDisplay } from "../../../language/displays";
@@ -552,6 +553,20 @@ export const SourcePage: React.FC = () => {
           column: model.getLineMaxColumn(position.lineNumber),
         });
         selectSpan(codeEditor, { start, end });
+        codeEditor.focus();
+      },
+      (name) => {
+        const codeEditor = editorRef.current;
+        const model = codeEditor?.getModel();
+        const selection = codeEditor?.getSelection();
+        if (!codeEditor || !model || !selection || !name) return;
+        const before = model.getLineContent(selection.startLineNumber).slice(0, selection.startColumn - 1);
+        const { text, caret } = unitInsert(before, name);
+        codeEditor.executeEdits("units", [{ range: selection, text, forceMoveMarkers: true }]);
+        codeEditor.setPosition({
+          lineNumber: selection.startLineNumber,
+          column: selection.startColumn + caret,
+        });
         codeEditor.focus();
       },
     );

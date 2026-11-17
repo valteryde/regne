@@ -8,12 +8,15 @@ import {
   Power,
   Redo2,
   Save,
+  Scale,
   Settings,
   Undo2,
 } from 'lucide-react';
 import iconUrl from '../../assets/icon.png';
+import { UNIT_NAMES } from '../../../language/units';
 import {
   dispatchSourceCommand,
+  insertSource,
   revealSource,
   type SourceCommand,
   type SourceLabel,
@@ -74,6 +77,7 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({ label, onOpenSet
           </HeaderButton>
         </div>
         <SectionsMenu headings={label?.headings ?? []} />
+        <UnitsMenu />
       </nav>
 
       <div className="ml-auto flex items-center gap-1 shrink-0">
@@ -119,6 +123,125 @@ function HeaderButton({
     >
       {children}
     </button>
+  );
+}
+
+const COMMON_UNITS = [
+  'm',
+  'g',
+  's',
+  'L',
+  'mol',
+  'K',
+  'N',
+  'Pa',
+  'bar',
+  'J',
+  'W',
+  'Hz',
+  'rad',
+  'degC',
+  'degF',
+  'h',
+  'min',
+  'day',
+];
+
+function listedUnits(query: string): readonly string[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return COMMON_UNITS;
+  const prefix: string[] = [];
+  const rest: string[] = [];
+  for (const name of UNIT_NAMES) {
+    const lower = name.toLowerCase();
+    if (lower.startsWith(needle)) prefix.push(name);
+    else if (lower.includes(needle)) rest.push(name);
+    if (prefix.length >= 40) break;
+  }
+  return prefix.length >= 40 ? prefix : prefix.concat(rest).slice(0, 40);
+}
+
+function UnitsMenu() {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const close = () => {
+    setOpen(false);
+    setQuery('');
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('mousedown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('mousedown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const names = listedUnits(query);
+  const choose = (name: string) => {
+    insertSource(name);
+    close();
+  };
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <HeaderButton tone="steel" label="Units" pressed={open} onClick={() => (open ? close() : setOpen(true))}>
+        <Scale />
+      </HeaderButton>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Units"
+          className="absolute top-full left-0 mt-1 w-56 border border-[var(--border-color)] bg-[var(--bg-surface)] z-20"
+        >
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && names[0]) {
+                event.preventDefault();
+                choose(names[0]);
+              }
+            }}
+            placeholder="Find a unit"
+            aria-label="Find a unit"
+            className="shrink-0 h-8 px-3 border-b border-[var(--border-color)] bg-transparent text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
+          />
+          <div className="max-h-64 overflow-auto py-1">
+            {names.length === 0 ? (
+              <p className="px-3 py-1.5 text-[13px] text-[var(--text-muted)]">No units</p>
+            ) : (
+              names.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  role="menuitem"
+                  title={name}
+                  className="block w-full text-left text-[13px] px-3 py-1.5 text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] truncate"
+                  onClick={() => choose(name)}
+                >
+                  {name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

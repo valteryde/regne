@@ -59,6 +59,12 @@ export function suggestions(before: string): string[] {
   return pool.filter((name) => name.startsWith(partial));
 }
 
+/** Text for a unit picked in the header, and the caret offset inside that text. */
+export function unitInsert(before: string, name: string): { text: string; caret: number } {
+  if (insideUnit(before)) return { text: name, caret: name.length };
+  return { text: `[${name}]`, caret: name.length + 1 };
+}
+
 /** `[` after a value or `in` opens a unit. `[` in any other place opens a list. */
 export function opensUnit(before: string): boolean {
   const trimmed = before.trimEnd();
