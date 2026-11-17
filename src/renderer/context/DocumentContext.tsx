@@ -1255,6 +1255,7 @@ export const DocumentProvider: React.FC<{ children: ReactNode }> = ({ children }
         if (cmd === 'undo') { dispatchSourceCommand('undo'); return; }
         if (cmd === 'redo') { dispatchSourceCommand('redo'); return; }
         if (cmd === 'export-latex') { dispatchSourceCommand('export'); return; }
+        if (cmd === 'export-html') { dispatchSourceCommand('export-html'); return; }
         if (cmd === 'evaluate-math' || cmd === 'evaluate-all' || cmd === 'insert-math' || cmd === 'insert-text') return;
       }
       switch (cmd) {

@@ -2,154 +2,60 @@ import React, { useState, useEffect } from 'react';
 import { EngineProvider } from './context/EngineContext';
 import { DocumentProvider } from './context/DocumentContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { Toolbar } from './components/Toolbar/Toolbar';
-import { SidebarDrawer, SidebarTab } from './components/Sidebar/SidebarDrawer';
 import { SourcePage } from './components/SourcePage/SourcePage';
-import { ExportModal } from './components/Dialogs/ExportModal';
 import { SettingsModal } from './components/Dialogs/SettingsModal';
 import { UpdateNotification } from './components/Updater/UpdateNotification';
 import { VenvSetupBanner } from './components/Toolbar/VenvSetupBanner';
+import { useSourceLabel } from './sourceCommands';
 
 const MainLayout: React.FC = () => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(true);
-  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('outline');
-  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const label = useSourceLabel();
 
-  // Keyboard shortcut: Cmd+, or Ctrl+, opens Settings.
-  // Cmd+Shift+B toggles the sidebar from the native menu.
-  // Cmd+Shift+O opens the outline. Cmd+P opens palettes when not typing.
-  // Cmd+B / Cmd+I / Cmd+U format the selection.
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const typing =
-        !!target &&
-        (target.tagName === 'MATH-FIELD' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable ||
-          !!target.closest('[data-regne-source]'));
-
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault();
         setIsSettingsOpen(true);
-      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        setIsSidebarCollapsed((prev) => {
-          if (prev) {
-            setActiveSidebarTab('outline');
-            return false;
-          }
-          if (activeSidebarTab !== 'outline') {
-            setActiveSidebarTab('outline');
-            return false;
-          }
-          return true;
-        });
-      } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
-        if (typing) return;
-        e.preventDefault();
-        setIsSidebarCollapsed((prev) => {
-          if (prev) {
-            setActiveSidebarTab('palettes');
-            return false;
-          }
-          if (activeSidebarTab !== 'palettes') {
-            setActiveSidebarTab('palettes');
-            return false;
-          }
-          return true;
-        });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeSidebarTab]);
+  }, []);
 
-  // Listen to native menu command
   useEffect(() => {
     const api = (window as any).regneAPI || (window as any).hypatiaAPI;
     if (api?.onMenuCommand) {
       return api.onMenuCommand((cmd: string) => {
-        if (cmd === 'open-settings') {
-          setIsSettingsOpen(true);
-        } else if (cmd === 'toggle-palette' || cmd === 'toggle-sidebar') {
-          setIsSidebarCollapsed((prev) => !prev);
-        }
+        if (cmd === 'open-settings') setIsSettingsOpen(true);
       });
     }
   }, []);
 
-  const handleToggleSidebar = () => {
-    setIsSidebarCollapsed((prev) => !prev);
-  };
-
-  const handleToggleOutline = () => {
-    if (isSidebarCollapsed) {
-      setIsSidebarCollapsed(false);
-      setActiveSidebarTab('outline');
-    } else if (activeSidebarTab === 'outline') {
-      setIsSidebarCollapsed(true);
-    } else {
-      setActiveSidebarTab('outline');
-    }
-  };
-
-  const handleTogglePalettes = () => {
-    if (isSidebarCollapsed) {
-      setIsSidebarCollapsed(false);
-      setActiveSidebarTab('palettes');
-    } else if (activeSidebarTab === 'palettes') {
-      setIsSidebarCollapsed(true);
-    } else {
-      setActiveSidebarTab('palettes');
-    }
-  };
-
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] font-sans text-[var(--text-primary)] transition-colors">
-      {/* Ribbon Toolbar */}
-      <Toolbar
-        sidebarOpen={!isSidebarCollapsed}
-        activeSidebarTab={activeSidebarTab}
-        onToggleSidebar={handleToggleSidebar}
-        onToggleOutline={handleToggleOutline}
-        onTogglePalettes={handleTogglePalettes}
-        onOpenExportModal={() => setIsExportModalOpen(true)}
-        onOpenSettingsModal={() => setIsSettingsOpen(true)}
-      />
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] font-sans text-[var(--text-primary)]">
+      <header className="flex items-center justify-between h-10 px-4 border-b border-[var(--border-color)] bg-[var(--bg-canvas)] shrink-0">
+        <span className="text-sm truncate">{label?.title || "Regne"}</span>
+        <button
+          type="button"
+          className="text-sm px-2 py-1"
+          onClick={() => setIsSettingsOpen(true)}
+        >
+          Settings
+        </button>
+      </header>
 
-      {/* Dedicated Math Engine Setup Notification Banner */}
       <VenvSetupBanner />
 
-      {/* Main Document Workspace */}
-      <div className="flex-1 flex overflow-hidden bg-[var(--bg-canvas)]">
-        <SidebarDrawer
-          activeTab={activeSidebarTab}
-          isCollapsed={isSidebarCollapsed}
-          onTabChange={(tab) => setActiveSidebarTab(tab)}
-          onToggleCollapse={handleToggleSidebar}
-        />
+      <main className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+        <SourcePage />
+      </main>
 
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-[var(--bg-canvas)]">
-          <SourcePage />
-        </main>
-      </div>
-
-      {/* Export Modal */}
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-      />
-
-      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
 
-      {/* Auto-Updater Notification & Progress Bar */}
       <UpdateNotification />
     </div>
   );

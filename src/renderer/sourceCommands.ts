@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type SourceCommand = "save" | "save-as" | "open" | "new" | "undo" | "redo" | "export";
+export type SourceCommand = "save" | "save-as" | "open" | "new" | "undo" | "redo" | "export" | "export-html";
 
 export interface SourceLabel {
   title: string;

@@ -14,7 +14,7 @@ import {
   storeValues,
 } from "../../../language/session";
 import { Span } from "../../../language/ast";
-import { exportLatex } from "../../../language/export";
+import { exportHtml, exportLatex } from "../../../language/export";
 import { evaluationPlan } from "../../../language/page";
 import {
   PointerTarget,
@@ -224,16 +224,16 @@ export const SourcePage: React.FC = () => {
     void recomputeRef.current(text);
   };
 
-  const exportTex = async () => {
+  const exportFile = async (kind: "tex" | "html") => {
     const text = editorRef.current?.getValue() ?? sourceRef.current;
-    const tex = exportLatex(text);
+    const content = kind === "tex" ? exportLatex(text) : exportHtml(text);
     const api = window.regneAPI || window.hypatiaAPI;
-    const name = suggestedName(text).replace(/\.regne$/, ".tex");
+    const name = suggestedName(text).replace(/\.regne$/, kind === "tex" ? ".tex" : ".html");
     if (api?.exportDocument) {
-      await api.exportDocument(tex, "tex", "LaTeX");
+      await api.exportDocument(content, kind, kind === "tex" ? "LaTeX" : "HTML");
       return;
     }
-    const url = URL.createObjectURL(new Blob([tex], { type: "text/plain" }));
+    const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = name;
@@ -286,8 +286,8 @@ export const SourcePage: React.FC = () => {
     applyText(CYLINDER_NOTE, null);
   };
 
-  const actions = useRef({ save, open, applyText, newFile, confirmLeave, exportTex });
-  actions.current = { save, open, applyText, newFile, confirmLeave, exportTex };
+  const actions = useRef({ save, open, applyText, newFile, confirmLeave, exportFile });
+  actions.current = { save, open, applyText, newFile, confirmLeave, exportFile };
 
   useEffect(() => {
     alive.current = true;
@@ -494,7 +494,8 @@ export const SourcePage: React.FC = () => {
         else if (command === "new") void actions.current.newFile();
         else if (command === "undo") editor?.trigger("menu", "undo", null);
         else if (command === "redo") editor?.trigger("menu", "redo", null);
-        else if (command === "export") void actions.current.exportTex();
+        else if (command === "export") void actions.current.exportFile("tex");
+        else if (command === "export-html") void actions.current.exportFile("html");
       },
       (content, filePath) => {
         void (async () => {

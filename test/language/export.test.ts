@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CYLINDER_NOTE } from "../../src/language/document";
-import { exportLatex } from "../../src/language/export";
+import { exportHtml, exportLatex } from "../../src/language/export";
 
 describe("LaTeX export", () => {
   test("the cylinder note compiles without highlight wrappers or markers", () => {
@@ -28,6 +28,14 @@ describe("LaTeX export", () => {
     assert.match(tex, /\\dfrac\{d\}\{dx\}/);
     assert.match(tex, /\\subsection\{Next\}/);
     assert.equal(tex.includes("htmlData"), false);
+  });
+
+  test("html export uses the same heading and drops highlight wrappers", () => {
+    const html = exportHtml(CYLINDER_NOTE);
+    assert.match(html, /<h1>Charge in a cylinder<\/h1>/);
+    assert.match(html, /The holdup is fixed/);
+    assert.equal(html.includes("htmlClass"), false);
+    assert.equal(html.includes("htmlData"), false);
   });
 
   test("a title with a special character is escaped", () => {
