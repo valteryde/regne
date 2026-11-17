@@ -135,6 +135,13 @@ export const Sheet: React.FC<SheetProps> = ({
   );
 };
 
+/** Drop the canvas pixel size so the viewBox can scale to the page column. */
+function fitPlotSvg(svg: string): string {
+  return svg.replace(/<svg\b[^>]*>/, (open) =>
+    open.replace(/\s(?:width|height)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, ""),
+  );
+}
+
 const BlockView: React.FC<{ block: PageBlock }> = ({ block }) => {
   if (block.kind === "gap") {
     return <div data-regne-start={block.start} data-regne-end={block.end} className="h-4" />;
@@ -194,7 +201,7 @@ const BlockView: React.FC<{ block: PageBlock }> = ({ block }) => {
         <KaTeXRenderer math={display.inputLatex} className="regne-input" />
       ) : null}
       {display?.valueSvg ? (
-        <div data-regne-plot className="my-2" dangerouslySetInnerHTML={{ __html: display.valueSvg }} />
+        <div data-regne-plot className="my-2" dangerouslySetInnerHTML={{ __html: fitPlotSvg(display.valueSvg) }} />
       ) : display?.valueLatex ? (
         <div data-regne-value>
           <KaTeXRenderer math={display.valueLatex} />

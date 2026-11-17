@@ -160,6 +160,19 @@ math-field::part(menu-toggle) {
   text-align: left;
 }
 
+/* Kaxe exports a fixed canvas (A4Small is 3000×2000). Fit it to the page column. */
+[data-regne-plot] {
+  width: 100%;
+  max-width: 100%;
+}
+
+[data-regne-plot] svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
 .regne-broken-line {
   background-color: #3a2a28;
 }
