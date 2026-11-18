@@ -17,8 +17,10 @@ export interface Pause {
 }
 
 /**
- * The cache key is this statement plus every statement that ran before it.
- * Those earlier lines are the bindings this one used.
+ * Fast path when every statement text is unchanged, such as a heading or a
+ * paragraph edit. The key is the whole prefix, so one changed line misses
+ * everything after it. The worker then reuses a statement whose math and the
+ * bindings it reads are the same.
  */
 export function cacheKey(sources: string[], index: number): string {
   return sources.slice(0, index + 1).join("\n");

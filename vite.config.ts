@@ -51,7 +51,7 @@ function evalIrDev() {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
-      let body: { id?: string; statements?: unknown[] } = {};
+      let body: { id?: string; statements?: unknown[]; known?: string[] } = {};
       try {
         body = JSON.parse(Buffer.concat(chunks).toString() || '{}');
       } catch {
@@ -72,7 +72,13 @@ function evalIrDev() {
         res.setHeader('content-type', 'application/json');
         res.end(line);
       });
-      worker.stdin.write(JSON.stringify({ id, action: 'eval-ir', statements: body.statements ?? [] }) + '\n');
+      const message: { id: string; action: 'eval-ir'; statements: unknown[]; known?: string[] } = {
+        id,
+        action: 'eval-ir',
+        statements: body.statements ?? [],
+      };
+      if (body.known) message.known = body.known;
+      worker.stdin.write(JSON.stringify(message) + '\n');
     });
   };
 

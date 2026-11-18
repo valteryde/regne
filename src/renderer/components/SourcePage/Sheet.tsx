@@ -1,7 +1,7 @@
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Span } from "../../../language/ast";
 import { FreshValue, StatementDisplay } from "../../../language/displays";
-import { PageBlock, pageDocument } from "../../../language/page";
+import { HeldRow, PageBlock, alignRowKeys, pageDocument, rowIdentity } from "../../../language/page";
 import { PointerTarget } from "../../../language/selection";
 import { useTheme } from "../../context/ThemeContext";
 import { CSS_DPI, sheetScale } from "../../utils/pageGeometry";
@@ -43,6 +43,10 @@ export const Sheet: React.FC<SheetProps> = ({
 }) => {
   const { invertPage } = useTheme();
   const blocks = pageDocument(source, displays, selection, inlineValues);
+  const rowKeys = useRef<HeldRow[]>([]);
+  const ids = blocks.map((block) => rowIdentity(source, block));
+  const keys = alignRowKeys(rowKeys.current, ids);
+  rowKeys.current = ids.map((id, index) => ({ id, key: keys[index] }));
   const width = paperWidth * CSS_DPI;
   const pageRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
@@ -130,8 +134,8 @@ export const Sheet: React.FC<SheetProps> = ({
             {pending && blocks.length === 0 && !legacy && (
               <p className="text-sm text-[var(--page-muted)]">Computing…</p>
             )}
-            {blocks.map((block) => (
-              <BlockView key={`${block.kind}-${block.start}`} block={block} />
+            {blocks.map((block, index) => (
+              <BlockView key={keys[index]} block={block} />
             ))}
           </article>
         </div>
@@ -148,6 +152,8 @@ function fitPlotSvg(svg: string): string {
 }
 
 const BlockView: React.FC<{ block: PageBlock }> = ({ block }) => {
+  const svg = block.kind === "display" ? block.display?.valueSvg ?? "" : "";
+  const fittedPlot = useMemo(() => (svg ? fitPlotSvg(svg) : ""), [svg]);
   if (block.kind === "gap") {
     return <div data-regne-start={block.start} data-regne-end={block.end} className="h-4" />;
   }
@@ -205,8 +211,8 @@ const BlockView: React.FC<{ block: PageBlock }> = ({ block }) => {
       {display?.inputLatex ? (
         <KaTeXRenderer math={display.inputLatex} className="regne-input" />
       ) : null}
-      {display?.valueSvg ? (
-        <div data-regne-plot className="my-2" dangerouslySetInnerHTML={{ __html: fitPlotSvg(display.valueSvg) }} />
+      {fittedPlot ? (
+        <div data-regne-plot className="my-2" dangerouslySetInnerHTML={{ __html: fittedPlot }} />
       ) : display?.valueLatex ? (
         <div data-regne-value>
           <KaTeXRenderer math={display.valueLatex} />

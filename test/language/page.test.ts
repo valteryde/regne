@@ -3,7 +3,15 @@ import { describe, test } from "node:test";
 import { CYLINDER_NOTE, readDocument } from "../../src/language/document";
 import { FreshValue } from "../../src/language/displays";
 import { paint } from "../../src/language/session";
-import { anchorAt, constantLatex, evaluationPlan, pageDocument, pageText } from "../../src/language/page";
+import {
+  alignRowKeys,
+  anchorAt,
+  constantLatex,
+  evaluationPlan,
+  pageDocument,
+  pageText,
+  rowIdentity,
+} from "../../src/language/page";
 
 const TEMPERATURE: FreshValue = { latex: "3969.21\\,\\mathrm{K}", kind: "quantity" };
 
@@ -136,6 +144,32 @@ describe("the painted page", () => {
     if (paragraph?.kind !== "paragraph") return;
     const text = paragraph.parts.map((part) => (part.kind === "text" ? part.text : "")).join("");
     assert.match(text, /\$2x\$/);
+  });
+});
+
+describe("row keys", () => {
+  test("inserting a heading above keeps the keys of the rows below", () => {
+    const painted = paint(CYLINDER_NOTE, fiveValues(), []);
+    const before = pageDocument(CYLINDER_NOTE, painted, null);
+    const ids = before.map((block) => rowIdentity(CYLINDER_NOTE, block));
+    const keys = alignRowKeys([], ids);
+    const inserted = `# Note\n${CYLINDER_NOTE}`;
+    const after = pageDocument(inserted, [], null);
+    const nextIds = after.map((block) => rowIdentity(inserted, block));
+    const nextKeys = alignRowKeys(
+      ids.map((id, index) => ({ id, key: keys[index] })),
+      nextIds,
+    );
+    assert.equal(nextIds[0], "h:1:Note");
+    assert.deepEqual(nextKeys.slice(1), keys);
+    const selected = pageDocument(CYLINDER_NOTE, painted, {
+      start: CYLINDER_NOTE.indexOf("66"),
+      end: CYLINDER_NOTE.indexOf("66") + 2,
+    });
+    assert.deepEqual(
+      selected.map((block) => rowIdentity(CYLINDER_NOTE, block)),
+      ids,
+    );
   });
 });
 

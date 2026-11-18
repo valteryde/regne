@@ -852,7 +852,7 @@ class SympyProcessManager {
     });
   }
 
-  public async evaluateIr(id: string, statements: unknown[]): Promise<any> {
+  public async evaluateIr(id: string, statements: unknown[], known?: string[]): Promise<any> {
     if (this.isSettingUp && this.setupPromise) {
       await this.setupPromise;
     }
@@ -895,7 +895,13 @@ class SympyProcessManager {
       });
 
       try {
-        this.process?.stdin?.write(JSON.stringify({ id, action: 'eval-ir', statements }) + '\n');
+        const body: { id: string; action: 'eval-ir'; statements: unknown[]; known?: string[] } = {
+          id,
+          action: 'eval-ir',
+          statements,
+        };
+        if (known) body.known = known;
+        this.process?.stdin?.write(JSON.stringify(body) + '\n');
       } catch (err) {
         clearTimeout(timer);
         this.pendingRequests.delete(id);
@@ -941,8 +947,8 @@ ipcMain.handle('cas:sympy:eval', async (_event, { id, code }) => {
   return sympyManager.evaluate(id, code);
 });
 
-ipcMain.handle('cas:sympy:eval-ir', async (_event, { id, statements }) => {
-  return sympyManager.evaluateIr(id, statements);
+ipcMain.handle('cas:sympy:eval-ir', async (_event, { id, statements, known }) => {
+  return sympyManager.evaluateIr(id, statements, known);
 });
 
 ipcMain.handle('cas:sympy:reset', async () => {

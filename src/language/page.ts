@@ -220,3 +220,42 @@ function caretIn(source: string, block: Extract<Block, { kind: "heading" | "para
   if (source[origin] === " ") origin += 1;
   return origin;
 }
+
+export interface HeldRow {
+  id: string;
+  key: string;
+}
+
+/**
+ * Stable across an edit above this row. Offsets and the selection highlight
+ * are not part of it, so typing higher on the page does not remount the row.
+ */
+export function rowIdentity(source: string, block: PageBlock): string {
+  if (block.kind === "gap") return "gap";
+  if (block.kind === "heading") return `h:${block.level}:${block.title}`;
+  if (block.kind === "paragraph") return `p:${source.slice(block.start, block.end)}`;
+  return `s:${source.slice(block.start, block.end)}`;
+}
+
+/** Give an unchanged row the key it had last time. A new row gets a fresh one. */
+export function alignRowKeys(previous: readonly HeldRow[], ids: readonly string[]): string[] {
+  const queues = new Map<string, string[]>();
+  for (const item of previous) {
+    const list = queues.get(item.id) ?? [];
+    list.push(item.key);
+    queues.set(item.id, list);
+  }
+  const used = new Set(previous.map((item) => item.key));
+  let fresh = previous.length;
+  return ids.map((id) => {
+    const reused = queues.get(id)?.shift();
+    if (reused) return reused;
+    let key = "";
+    do {
+      fresh += 1;
+      key = `row-${fresh}`;
+    } while (used.has(key));
+    used.add(key);
+    return key;
+  });
+}

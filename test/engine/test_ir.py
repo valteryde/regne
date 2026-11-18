@@ -5,7 +5,17 @@ import sympy
 from ward import test
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "engine"))
-from irEval import UNITS_ERROR, Session, _compact_unit_latex, evaluate_program, evaluate_statement
+from irEval import (
+    UNITS_ERROR,
+    Memo,
+    Session,
+    _compact_unit_latex,
+    evaluate_incremental,
+    evaluate_program,
+    evaluate_statement,
+    read_names,
+    wire_results,
+)
 
 S = {"start": 0, "end": 1}
 
@@ -284,3 +294,167 @@ def _():
     assert r"\mathrm{s}^{2}" in result["latex"]
     assert r"\mathrm{2}" not in result["latex"]
     assert _compact_unit_latex("s ** -2") == r"\mathrm{s}^{-2}"
+
+
+def assign(name: str, value: dict) -> dict:
+    return {"kind": "assign", "target": sym(name), "value": value, "span": dict(S)}
+
+
+def fn_plus_a() -> dict:
+    return {
+        "kind": "assign",
+        "target": call("f", [sym("x")]),
+        "value": binary("+", sym("x"), sym("a")),
+        "span": dict(S),
+    }
+
+
+def sine_plot(body: dict) -> dict:
+    domain = {
+        "kind": "equation",
+        "left": sym("x"),
+        "right": {
+            "kind": "range",
+            "left": {"kind": "unary", "op": "-", "expr": num("5"), "span": dict(S)},
+            "right": num("5"),
+            "span": dict(S),
+        },
+        "span": dict(S),
+    }
+    return call("plot", [body, domain])
+
+
+def run(statements, memo):
+    trace = []
+    evaluated = evaluate_incremental(statements, memo, trace)
+    return trace, evaluated
+
+
+@test("an unrelated edit reruns the assignment and leaves the plot")
+def _():
+    memo = Memo()
+    program = [
+        assign("a", num("1")),
+        binary("+", sym("b"), num("1")),
+        sine_plot(call("sin", [sym("x")])),
+    ]
+    first, _ = run(program, memo)
+    assert first == [0, 1, 2]
+    second, _ = run([assign("a", num("2")), program[1], program[2]], memo)
+    assert second == [0]
+
+
+@test("a plot reruns when it reads the edited name")
+def _():
+    memo = Memo()
+    program = [assign("a", num("1")), sine_plot(call("sin", [sym("a")]))]
+    run(program, memo)
+    second, _ = run([assign("a", num("2")), program[1]], memo)
+    assert second == [0, 1]
+
+
+@test("a function reruns when a name above its definition changes")
+def _():
+    memo = Memo()
+    program = [assign("a", num("1")), fn_plus_a(), call("f", [num("1")])]
+    _, first = run(program, memo)
+    assert first.results[2]["latex"] == "2"
+    trace, second = run([assign("a", num("2")), program[1], program[2]], memo)
+    assert trace == [0, 1, 2]
+    assert second.results[2]["latex"] == "3"
+
+
+@test("a function does not rerun when its captured name is assigned below it")
+def _():
+    memo = Memo()
+    program = [fn_plus_a(), assign("a", num("1")), call("f", [num("1")])]
+    _, first = run(program, memo)
+    assert "a" in first.results[2]["latex"]
+    trace, second = run([program[0], assign("a", num("2")), program[2]], memo)
+    assert trace == [1]
+    assert second.results[2]["latex"] == first.results[2]["latex"]
+
+
+@test("editing above restart leaves the cleared session's statement")
+def _():
+    memo = Memo()
+    below = binary("+", sym("a"), num("1"))
+    program = [assign("a", num("1")), {"kind": "restart", "span": dict(S)}, below]
+    _, first = run(program, memo)
+    trace, second = run([assign("a", num("2")), program[1], below], memo)
+    assert 2 not in trace
+    assert second.results[2]["latex"] == first.results[2]["latex"]
+    assert "a" in second.results[2]["latex"]
+
+
+@test("the same math with different spans runs once")
+def _():
+    def plus(span):
+        number = {"kind": "number", "text": "1", "span": span}
+        return {"kind": "binary", "op": "+", "left": number, "right": dict(number), "span": span}
+
+    memo = Memo()
+    first_trace, first = run([plus({"start": 0, "end": 1})], memo)
+    second_trace, second = run([plus({"start": 9, "end": 12})], memo)
+    assert first_trace == [0]
+    assert second_trace == []
+    assert second.results[0]["latex"] == first.results[0]["latex"]
+
+
+@test("a value binding of sin does not rerun a sin call")
+def _():
+    memo = Memo()
+    call_sin = call("sin", [num("1")])
+    run([assign("sin", num("5")), call_sin], memo)
+    trace, _ = run([assign("sin", num("6")), call_sin], memo)
+    assert trace == [0]
+
+
+@test("a one-shot program does not keep bindings from the previous one")
+def _():
+    evaluate_program([assign("a", num("1"))])
+    result = evaluate_program([sym("a")])
+    assert result[0]["text"] == "a"
+
+
+@test("the memo drops the oldest result past its limit")
+def _():
+    memo = Memo(limit=2)
+    one = [assign("a", num("1"))]
+    two = [assign("a", num("2"))]
+    three = [assign("a", num("3"))]
+    run(one, memo)
+    run(two, memo)
+    run(three, memo)
+    kept, _ = run(two, memo)
+    assert kept == []
+    trace, _ = run(one, memo)
+    assert trace == [0]
+
+
+@test("a known digest is omitted and an unknown one is sent in full")
+def _():
+    memo = Memo()
+    _, evaluated = run([binary("+", num("1"), num("1"))], memo)
+    digest = evaluated.digests[0]
+    plain = wire_results(evaluated.results, evaluated.digests, None)
+    assert "digest" not in plain[0]
+    assert plain[0]["latex"] == "2"
+    full = wire_results(evaluated.results, evaluated.digests, [])
+    assert full[0]["digest"] == digest
+    assert full[0]["latex"] == "2"
+    hidden = wire_results(evaluated.results, evaluated.digests, [digest])
+    assert hidden == [{"digest": digest, "cached": True}]
+
+
+@test("a plot domain name is not a read and a function body skips its parameters")
+def _():
+    domain = {
+        "kind": "equation",
+        "left": sym("x"),
+        "right": {"kind": "range", "left": sym("a"), "right": num("1"), "span": dict(S)},
+        "span": dict(S),
+    }
+    plotted = call("plot", [call("sin", [sym("t")]), domain])
+    assert read_names(plotted, Session()) == {"plot", "sin", "t", "a"}
+    assert read_names(fn_plus_a(), Session()) == {"a"}

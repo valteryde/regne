@@ -852,6 +852,7 @@ def main():
         }), flush=True)
 
     worker = SymPyWorker() if SYMPY_AVAILABLE else None
+    ir_memo = None
 
     for line in sys.stdin:
         line = line.strip()
@@ -885,6 +886,8 @@ def main():
 
         if action == "reset":
             worker.reset()
+            if ir_memo is not None:
+                ir_memo.clear()
             print(json.dumps({"id": req_id, "success": True}), flush=True)
             continue
 
@@ -893,13 +896,17 @@ def main():
             continue
 
         if action == "eval-ir":
-            from irEval import evaluate_program
             statements = req.get("statements")
             if statements is None and "ir" in req:
                 statements = [req["ir"]]
+            known = req["known"] if "known" in req else None
             start = time.perf_counter()
             try:
-                results = evaluate_program(statements or [])
+                from irEval import Memo, evaluate_incremental, wire_results
+                if ir_memo is None:
+                    ir_memo = Memo()
+                run = evaluate_incremental(statements or [], ir_memo)
+                results = wire_results(run.results, run.digests, known)
                 print(json.dumps({
                     "id": req_id,
                     "success": True,

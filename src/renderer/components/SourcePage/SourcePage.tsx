@@ -184,6 +184,7 @@ export const SourcePage: React.FC = () => {
   const applying = useRef(false);
   const generation = useRef(0);
   const cacheRef = useRef(new Map<string, FreshValue>());
+  const digestRef = useRef(new Map<string, FreshValue>());
   const displaysRef = useRef<StatementDisplay[]>([]);
   const opened = useRef(openBuffer(storedSource()));
   const sourceRef = useRef(opened.current.text);
@@ -235,7 +236,10 @@ export const SourcePage: React.FC = () => {
     let values = cachedValues(sources, cacheRef.current);
     if (!values) {
       try {
-        values = await evaluateIr(plan.map((item) => item.ir));
+        values = await evaluateIr(
+          plan.map((item) => item.ir),
+          digestRef.current,
+        );
         if (!current()) return;
         storeValues(sources, values, cacheRef.current);
         setEngineError(null);

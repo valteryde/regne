@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import math
 import re
+from collections import OrderedDict
 from typing import Any
 
 import sympy
@@ -61,8 +64,8 @@ class PlotValue:
 
 
 def evaluate_program(statements: list[dict]) -> list[dict]:
-    session = Session()
-    return [evaluate_statement(statement, session) for statement in statements]
+    """Evaluate every statement from a fresh session. Reuse inside this call only."""
+    return evaluate_incremental(statements, Memo()).results
 
 
 def evaluate_statement(node: dict, session: Session) -> dict:
@@ -817,3 +820,329 @@ def _clean(err: Exception) -> str:
 
 
 _MISSING = object()
+
+# A long-lived worker holds one of these. One evaluate_program call does not.
+MEMO_LIMIT = 128
+MEMO_VERSION = 1
+
+
+class _Effect:
+    def __init__(self):
+        self.values: dict[str, Any] = {}
+        self.functions: dict[str, tuple] = {}
+        self.value_pops: list[str] = []
+        self.function_pops: list[str] = []
+
+
+class _Cached:
+    def __init__(self, result: dict, digest: str, effect: _Effect):
+        self.result = result
+        self.digest = digest
+        self.effect = effect
+
+
+class IncrementalRun:
+    def __init__(self, results: list[dict], digests: list[str]):
+        self.results = results
+        self.digests = digests
+
+
+class Memo:
+    """Results keyed by the statement and the bindings it read."""
+
+    def __init__(self, limit: int = MEMO_LIMIT):
+        self.limit = limit
+        self.entries: OrderedDict[tuple, _Cached] = OrderedDict()
+
+    def get(self, key: tuple) -> _Cached | None:
+        cached = self.entries.get(key)
+        if cached is None:
+            return None
+        self.entries.move_to_end(key)
+        return cached
+
+    def put(self, key: tuple, cached: _Cached) -> None:
+        self.entries[key] = cached
+        self.entries.move_to_end(key)
+        while len(self.entries) > self.limit:
+            self.entries.popitem(last=False)
+
+    def clear(self) -> None:
+        self.entries.clear()
+
+
+def evaluate_incremental(
+    statements: list[dict],
+    memo: Memo,
+    trace: list[int] | None = None,
+) -> IncrementalRun:
+    """Walk the program, replaying cached effects and running what changed.
+
+    `trace` receives the indexes that were evaluated. A restart always runs,
+    because it clears the session being rebuilt. Everything else runs only
+    when its math or a binding it reads is different from a stored result.
+    """
+    session = Session()
+    results: list[dict] = []
+    digests: list[str] = []
+    for index, node in enumerate(statements or []):
+        if not isinstance(node, dict):
+            result = _error("Unknown statement.", None)
+            results.append(result)
+            digests.append(_digest(result))
+            if trace is not None:
+                trace.append(index)
+            continue
+        if node.get("kind") == "restart":
+            session.clear()
+            result = evaluate_statement(node, session)
+            results.append(result)
+            digests.append(_digest(result))
+            if trace is not None:
+                trace.append(index)
+            continue
+        try:
+            refs = _read_refs(node, session)
+        except Exception:
+            refs = _every_binding(session)
+        read_key = tuple(sorted(
+            (slot, name, _ref_fingerprint(slot, name, session))
+            for slot, name in refs
+        ))
+        key = (MEMO_VERSION, _identity(node), read_key)
+        cached = memo.get(key)
+        if cached is not None:
+            _apply_effect(session, cached.effect)
+            results.append(cached.result)
+            digests.append(cached.digest)
+            continue
+        before_values = dict(session.values)
+        before_functions = dict(session.functions)
+        result = evaluate_statement(node, session)
+        effect = _capture_effect(before_values, before_functions, session)
+        digest = _digest(result)
+        memo.put(key, _Cached(result, digest, effect))
+        results.append(result)
+        digests.append(digest)
+        if trace is not None:
+            trace.append(index)
+    return IncrementalRun(results, digests)
+
+
+def wire_results(results: list[dict], digests: list[str], known) -> list[dict]:
+    """Drop payloads the caller already holds. Omitting `known` keeps the old shape."""
+    if known is None:
+        return results
+    held = {item for item in known if isinstance(item, str)}
+    wired = []
+    for result, digest in zip(results, digests):
+        if digest in held:
+            wired.append({"digest": digest, "cached": True})
+        else:
+            body = dict(result)
+            body["digest"] = digest
+            wired.append(body)
+    return wired
+
+
+def read_names(node: dict, session: Session | None = None) -> set[str]:
+    """Names a statement looks up. A call and a bare symbol share the name."""
+    if session is None:
+        session = Session()
+    return {name for _slot, name in _statement_reads(node, session)}
+
+
+def _every_binding(session: Session) -> set[tuple[str, str]]:
+    refs = {("symbol", name) for name in session.values}
+    refs.update(("symbol", name) for name in session.functions)
+    refs.update(("call", name) for name in session.functions)
+    return refs
+
+
+def _read_refs(node: dict, session: Session) -> set[tuple[str, str]]:
+    return _statement_reads(node, session)
+
+
+def _statement_reads(node: dict, session: Session) -> set[tuple[str, str]]:
+    return _reads(node, session, set())
+
+
+def _reads(node, session: Session, shadowed: set[str]) -> set[tuple[str, str]]:
+    if not isinstance(node, dict):
+        return set()
+    kind = node.get("kind")
+    if kind in ("restart", "show", "number") or (isinstance(kind, str) and kind.startswith("unit")):
+        return set()
+    if kind == "symbol":
+        name = node.get("name")
+        if not isinstance(name, str) or name in shadowed:
+            return set()
+        return {("symbol", name)}
+    if kind == "call":
+        return _call_reads(node, session, shadowed)
+    if kind == "assign":
+        return _assign_reads(node, session, shadowed)
+    if kind in ("unary", "group", "conversion"):
+        return _reads(node.get("expr"), session, shadowed)
+    if kind == "quantity":
+        return _reads(node.get("value"), session, shadowed)
+    if kind in ("binary", "compare", "equation", "range"):
+        return _reads(node.get("left"), session, shadowed) | _reads(node.get("right"), session, shadowed)
+    if kind in ("list", "tuple"):
+        refs: set[tuple[str, str]] = set()
+        for item in node.get("items") or []:
+            refs |= _reads(item, session, shadowed)
+        return refs
+    refs = set()
+    for key, value in node.items():
+        if key == "span":
+            continue
+        refs |= _reads_any(value, session, shadowed)
+    return refs
+
+
+def _reads_any(value, session: Session, shadowed: set[str]) -> set[tuple[str, str]]:
+    if isinstance(value, dict):
+        return _reads(value, session, shadowed)
+    if isinstance(value, list):
+        refs: set[tuple[str, str]] = set()
+        for item in value:
+            refs |= _reads_any(item, session, shadowed)
+        return refs
+    return set()
+
+
+def _assign_reads(node: dict, session: Session, shadowed: set[str]) -> set[tuple[str, str]]:
+    target = node.get("target")
+    value = node.get("value")
+    if not isinstance(target, dict):
+        return _reads(value, session, shadowed)
+    if target.get("kind") == "symbol":
+        return _reads(value, session, shadowed)
+    if target.get("kind") == "call":
+        params: set[str] = set()
+        extra: set[tuple[str, str]] = set()
+        for arg in target.get("args") or []:
+            if isinstance(arg, dict) and arg.get("kind") == "symbol" and isinstance(arg.get("name"), str):
+                params.add(arg["name"])
+            else:
+                extra |= _reads(arg, session, shadowed)
+        return extra | _reads(value, session, shadowed | params)
+    return _reads(target, session, shadowed) | _reads(value, session, shadowed)
+
+
+def _call_reads(node: dict, session: Session, shadowed: set[str]) -> set[tuple[str, str]]:
+    refs: set[tuple[str, str]] = set()
+    name = node.get("name")
+    if isinstance(name, str):
+        # A call checks the function slot, not a value of the same name.
+        refs.add(("call", name))
+    builtin_plot = name == "plot" and name not in session.functions
+    for arg in node.get("args") or []:
+        if builtin_plot:
+            refs |= _plot_arg_reads(arg, session, shadowed)
+        else:
+            refs |= _reads(arg, session, shadowed)
+    return refs
+
+
+def _plot_arg_reads(arg, session: Session, shadowed: set[str]) -> set[tuple[str, str]]:
+    if isinstance(arg, dict) and arg.get("kind") == "equation":
+        right = arg.get("right")
+        if isinstance(right, dict) and right.get("kind") == "range":
+            # The domain name is not evaluated. The bounds are.
+            return _reads(right.get("left"), session, shadowed) | _reads(right.get("right"), session, shadowed)
+        return set()
+    return _reads(arg, session, shadowed)
+
+
+def _identity(node: dict) -> str:
+    return json.dumps(_strip_span(node), sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _strip_span(node):
+    if isinstance(node, dict):
+        return {key: _strip_span(value) for key, value in node.items() if key != "span"}
+    if isinstance(node, list):
+        return [_strip_span(value) for value in node]
+    return node
+
+
+def _ref_fingerprint(slot: str, name: str, session: Session) -> str:
+    try:
+        if slot == "call":
+            fn = session.functions.get(name)
+            return _fingerprint_function(fn) if fn is not None else ""
+        if name in session.values:
+            return "V:" + _fingerprint_value(session.values[name])
+        fn = session.functions.get(name)
+        if fn is not None:
+            return "F:" + _fingerprint_function(fn)
+        return ""
+    except Exception:
+        return "R:" + name
+
+
+def _fingerprint_function(fn) -> str:
+    kind, params, body = fn
+    names = ",".join(params)
+    if kind == "lambda":
+        return f"L:{names}:{sympy.srepr(body)}"
+    return f"Q:{names}:{_fingerprint_value(body)}"
+
+
+def _fingerprint_value(value: Any) -> str:
+    try:
+        return _fingerprint_inner(value)
+    except Exception:
+        return "R:" + repr(value)
+
+
+def _fingerprint_inner(value: Any) -> str:
+    if isinstance(value, bool):
+        return "B:1" if value else "B:0"
+    if isinstance(value, pint.Quantity):
+        return "Q:" + _fingerprint_value(value.magnitude) + ":" + str(value.units)
+    if isinstance(value, sympy.Basic):
+        return "S:" + sympy.srepr(value)
+    if isinstance(value, tuple):
+        return "T:" + "|".join(_fingerprint_value(item) for item in value)
+    if isinstance(value, list):
+        return "L:" + "|".join(_fingerprint_value(item) for item in value)
+    if isinstance(value, (int, float)):
+        return "N:" + repr(value)
+    if isinstance(value, str):
+        return "C:" + value
+    return "R:" + repr(value)
+
+
+def _capture_effect(before_values: dict, before_functions: dict, session: Session) -> _Effect:
+    effect = _Effect()
+    for name in before_values:
+        if name not in session.values:
+            effect.value_pops.append(name)
+    for name, value in session.values.items():
+        if name not in before_values or before_values[name] is not value:
+            effect.values[name] = value
+    for name in before_functions:
+        if name not in session.functions:
+            effect.function_pops.append(name)
+    for name, fn in session.functions.items():
+        if name not in before_functions or before_functions[name] is not fn:
+            effect.functions[name] = fn
+    return effect
+
+
+def _apply_effect(session: Session, effect: _Effect) -> None:
+    for name in effect.function_pops:
+        session.functions.pop(name, None)
+    for name in effect.value_pops:
+        session.values.pop(name, None)
+    session.values.update(effect.values)
+    session.functions.update(effect.functions)
+
+
+def _digest(result: dict) -> str:
+    payload = {key: value for key, value in result.items() if key != "span"}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
