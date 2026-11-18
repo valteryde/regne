@@ -5,7 +5,7 @@ import sympy
 from ward import test
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "engine"))
-from irEval import UNITS_ERROR, Session, evaluate_program, evaluate_statement
+from irEval import UNITS_ERROR, Session, _compact_unit_latex, evaluate_program, evaluate_statement
 
 S = {"start": 0, "end": 1}
 
@@ -206,6 +206,10 @@ def _unit(name: str) -> dict:
     return {"kind": "unit", "name": name, "span": dict(S)}
 
 
+def _unit_power(name: str, exp: int) -> dict:
+    return {"kind": "unitPower", "base": _unit(name), "exp": exp, "span": dict(S)}
+
+
 @test("an equation of quantities solves the temperature in kelvin")
 def _():
     gas_constant = {
@@ -255,3 +259,28 @@ def _():
     result = evaluate_statement(call("plot", [call("sin", [sym("x")]), domain]), Session())
     assert result["kind"] == "plot"
     assert "<svg" in result["svg"]
+
+
+@test("a tiny powered quantity uses a power of ten and a superscript")
+def _():
+    unit = _unit_binary("/", _unit_binary("*", _unit("m"), _unit_power("s", 2)), _unit("kg"))
+    statement = {"kind": "quantity", "value": num("6.6e-7"), "unit": unit, "span": dict(S)}
+    result = evaluate_statement(statement, Session())
+    assert result["kind"] == "quantity"
+    assert r"6.6\times 10^{-7}" in result["latex"]
+    assert r"\mathrm{s}^{2}" in result["latex"]
+    assert r"\mathrm{m}" in result["latex"]
+    assert r"\mathrm{kg}" in result["latex"]
+    assert r"\mathrm{2}" not in result["latex"]
+    assert "6.6e-07" in result["text"]
+    assert "\\times" not in result["text"]
+
+
+@test("a negative unit exponent stays a superscript")
+def _():
+    statement = {"kind": "quantity", "value": num("1"), "unit": _unit_power("s", -2), "span": dict(S)}
+    result = evaluate_statement(statement, Session())
+    assert result["kind"] == "quantity"
+    assert r"\mathrm{s}^{2}" in result["latex"]
+    assert r"\mathrm{2}" not in result["latex"]
+    assert _compact_unit_latex("s ** -2") == r"\mathrm{s}^{-2}"

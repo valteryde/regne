@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import math
+import re
 from typing import Any
 
 import sympy
@@ -661,7 +662,7 @@ def _latex_item(item) -> str:
 def _unit_latex(unit: pint.Unit) -> str:
     """Compact Pint symbols, with \\mathrm, \\cdot, and a slash."""
     compact = format(unit, "~").strip()
-    if compact and all(ch.isalpha() or ch.isdigit() or ch in " */" for ch in compact):
+    if compact and all(ch.isalpha() or ch.isdigit() or ch in " */-" for ch in compact):
         return _compact_unit_latex(compact)
     return format(unit, "~L")
 
@@ -678,7 +679,9 @@ def _compact_unit_latex(text: str) -> str:
 
 
 def _product_latex(text: str) -> str:
-    return r" \cdot ".join(_factor_latex(factor.strip()) for factor in text.split("*"))
+    """Split on a single `*`. `**` is an exponent and stays with its factor."""
+    factors = [factor.strip() for factor in re.split(r"(?<!\*)\*(?!\*)", text)]
+    return r" \cdot ".join(_factor_latex(factor) for factor in factors if factor)
 
 
 def _factor_latex(token: str) -> str:
@@ -702,8 +705,8 @@ def format_value(value) -> dict:
         unit = _unit_latex(value.units)
         return {
             "kind": "quantity",
-            "latex": f"{mag}\\,{unit}",
-            "text": f"{_format_magnitude(value.magnitude)} {format(value.units, '~')}",
+            "latex": f"{_scientific_latex(mag)}\\,{unit}",
+            "text": f"{mag} {format(value.units, '~')}",
             "span": None,
         }
     if isinstance(value, (list, tuple)):
@@ -715,7 +718,7 @@ def format_value(value) -> dict:
         return _ok("expression", f"\\mathrm{{{text}}}", text)
     if isinstance(value, (int, float)):
         text = _format_magnitude(value)
-        return _ok("expression", text, text)
+        return _ok("expression", _scientific_latex(text), text)
     return _ok("expression", str(value), str(value))
 
 
@@ -725,6 +728,15 @@ def _ok(kind: str, latex: str, text: str) -> dict:
 
 def _error(message: str, span) -> dict:
     return {"kind": "error", "latex": "", "text": message, "span": span, "message": message}
+
+
+def _scientific_latex(text: str) -> str:
+    """`6.6e-07` is \\(6.6\\times 10^{-7}\\). Other magnitudes stay as written."""
+    match = re.fullmatch(r"([+-]?)(\d+(?:\.\d+)?)[eE]([+-]?\d+)", text)
+    if not match:
+        return text
+    sign, mantissa, exponent = match.groups()
+    return f"{sign}{mantissa}\\times 10^{{{int(exponent)}}}"
 
 
 def _format_magnitude(value) -> str:
