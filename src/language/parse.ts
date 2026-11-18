@@ -17,6 +17,8 @@ export interface Parsed {
   comments: Span[];
   source: string;
   base: number;
+  /** A trailing `;` typesets the statement and does not evaluate it. */
+  displayOnly: boolean;
 }
 
 export class ParseError extends Error {
@@ -40,8 +42,9 @@ type Token = {
 
 export function parseStatement(source: string, base = 0): Parsed {
   const { tokens, comments } = lex(source, base);
-  const node = new Parser(tokens, comments).parseStatement();
-  return { node, comments, source, base };
+  const parser = new Parser(tokens, comments);
+  const node = parser.parseStatement();
+  return { node, comments, source, base, displayOnly: parser.displayOnly };
 }
 
 function lex(source: string, base: number): { tokens: Token[]; comments: Span[] } {
@@ -95,7 +98,7 @@ function lex(source: string, base: number): { tokens: Token[]; comments: Span[] 
       i += 2;
       continue;
     }
-    if ("+-*/^()<>=[],".includes(ch)) {
+    if ("+-*/^()<>=[],;".includes(ch)) {
       tokens.push({ kind: "punct", text: ch, start: base + i, end: base + i + 1 });
       i++;
       continue;
@@ -135,6 +138,7 @@ function scanNumber(
 
 class Parser {
   private at = 0;
+  displayOnly = false;
 
   constructor(
     private readonly tokens: Token[],
@@ -160,7 +164,7 @@ class Parser {
         throw this.fail("The left side of := must be a name or a function of names.", left.span);
       }
       const value = this.parseExpression();
-      this.end();
+      this.finish();
       return {
         type: "assign",
         target,
@@ -168,8 +172,13 @@ class Parser {
         span: { start: left.span.start, end: value.span.end },
       } satisfies AssignNode;
     }
-    this.end();
+    this.finish();
     return left;
+  }
+
+  private finish(): void {
+    if (this.eat(";")) this.displayOnly = true;
+    this.end();
   }
 
   private parseEquation(): Node {

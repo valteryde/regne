@@ -137,6 +137,21 @@ def _():
     assert results[1]["latex"] == "10"
 
 
+@test("E is a name and a shown line does not change the session")
+def _():
+    assert evaluate_statement(sym("E"), Session())["latex"] == "E"
+    results = evaluate_program([
+        {"kind": "assign", "target": sym("a"), "value": num("4"), "span": dict(S)},
+        {"kind": "show", "span": dict(S)},
+        sym("a"),
+        sym("E"),
+    ])
+    assert results[1]["kind"] == "expression"
+    assert results[1]["latex"] == ""
+    assert results[2]["latex"] == "4"
+    assert results[3]["latex"] == "E"
+
+
 @test("restart forgets the bindings above it")
 def _():
     results = evaluate_program([

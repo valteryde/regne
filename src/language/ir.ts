@@ -14,7 +14,8 @@ export type Ir =
   | EquationIr
   | AssignIr
   | RangeIr
-  | RestartIr;
+  | RestartIr
+  | ShowIr;
 
 export interface NumberIr {
   kind: "number";
@@ -107,6 +108,12 @@ export interface RangeIr {
 
 export interface RestartIr {
   kind: "restart";
+  span: Span;
+}
+
+/** Typeset the source and leave the session alone. Produced by a trailing `;`. */
+export interface ShowIr {
+  kind: "show";
   span: Span;
 }
 

@@ -24,7 +24,10 @@ function python(): string {
 }
 
 function evaluate(sources: string[]): Value[] {
-  const statements = sources.map((source) => lowerStatement(parseStatement(source).node));
+  const statements = sources.map((source) => {
+    const parsed = parseStatement(source);
+    return lowerStatement(parsed.node, parsed.displayOnly);
+  });
   const proc = spawnSync(python(), ["-c", SCRIPT], {
     input: JSON.stringify(statements),
     encoding: "utf8",
@@ -104,6 +107,23 @@ describe("lowered statements evaluated by the worker", () => {
     assert.equal(temperature.kind, "quantity");
     assert.match(temperature.latex, /3969/);
     assert.match(temperature.latex, /\\mathrm\{K\}/);
+  });
+
+  test("a trailing semicolon typesets an equation and does not solve or bind", () => {
+    const values = evaluate([
+      "E = p_0 * V_0^n * (V_gas^(1-n) - V_0^(1-n)) / (n-1);",
+      "a := 2;",
+      "2 + 2;",
+      "a",
+      "2 + 2",
+    ]);
+    assert.equal(values[0].kind, "expression");
+    assert.equal(values[0].latex, "");
+    assert.equal(values[0].message, undefined);
+    assert.equal(values[1].latex, "");
+    assert.equal(values[2].latex, "");
+    assert.equal(values[3].latex, "a");
+    assert.equal(values[4].latex, "4");
   });
 
   test("diff of a quantity fails on that quantity's span", () => {

@@ -11,7 +11,6 @@ const FUNCTIONS: Record<string, string> = {
 
 const CONSTANTS: Record<string, string> = {
   pi: "\\pi",
-  E: "\\mathrm{e}",
   I: "\\mathrm{i}",
   oo: "\\infty",
 };
@@ -63,7 +62,7 @@ function body(node: Node, opts: Opts): string {
     case "number":
       return formatNumber(node.text);
     case "name":
-      return CONSTANTS[node.text] ?? literal(node.text);
+      return CONSTANTS[node.text] ?? scripted(node.text);
     case "group":
       return `\\left(${print(node.expr, opts)}\\right)`;
     case "list":
@@ -89,7 +88,7 @@ function body(node: Node, opts: Opts): string {
     case "call":
       return printCall(node, opts);
     case "unitName":
-      return `\\mathrm{${literal(node.text)}}`;
+      return `\\mathrm{${escaped(node.text)}}`;
     case "unitBinary":
       if (node.op === "*") return `${print(node.left, opts)}\\cdot ${print(node.right, opts)}`;
       return `${print(node.left, opts)}/${print(node.right, opts)}`;
@@ -108,10 +107,14 @@ function body(node: Node, opts: Opts): string {
 }
 
 function printBinary(node: Extract<Node, { type: "binary" }>, opts: Opts): string {
+  if (node.op === "^") {
+    return `${print(node.left, opts)}^{${withoutGroupingParens(node.right, opts)}}`;
+  }
+  if (node.op === "/") {
+    return `\\frac{${withoutGroupingParens(node.left, opts)}}{${withoutGroupingParens(node.right, opts)}}`;
+  }
   const left = print(node.left, opts);
   const right = print(node.right, opts);
-  if (node.op === "^") return `${left}^{${right}}`;
-  if (node.op === "/") return `\\frac{${left}}{${right}}`;
   if (node.op === "*") {
     const quantity = node.left.type === "quantity" || node.right.type === "quantity";
     const bothNumbers = node.left.type === "number" && node.right.type === "number";
@@ -124,7 +127,7 @@ function printBinary(node: Extract<Node, { type: "binary" }>, opts: Opts): strin
 function printCall(node: CallNode, opts: Opts): string {
   const pretty = prettyCall(node, opts);
   if (pretty !== null) return pretty;
-  const symbol = FUNCTIONS[node.callee.text] ?? `\\operatorname{${literal(node.callee.text)}}`;
+  const symbol = FUNCTIONS[node.callee.text] ?? `\\operatorname{${escaped(node.callee.text)}}`;
   const head = emit(node.callee, symbol, opts);
   const args = node.args.map((arg) => print(arg, opts)).join(", ");
   return `${head}\\left(${args}\\right)`;
@@ -182,6 +185,45 @@ function formatNumber(text: string): string {
   return `${match[1]}\\times 10^{${exp}}`;
 }
 
-function literal(text: string): string {
+/**
+ * Parentheses around a whole exponent, numerator, or denominator only exist
+ * so the source parser can see the group. The superscript and the fraction
+ * bar already group those parts, so the parentheses are not drawn.
+ */
+function withoutGroupingParens(node: Node, opts: Opts): string {
+  if (node.type !== "group") return print(node, opts);
+  return emit(node, print(node.expr, opts), opts);
+}
+
+/** `V_gas` is \(V_{\mathrm{gas}}\) and `p_0` is \(p_0\). Further underscores nest. */
+function scripted(text: string): string {
+  const at = text.indexOf("_");
+  if (at < 0) return text;
+  if (at === 0) return escaped(text);
+  const base = text.slice(0, at);
+  const rest = text.slice(at + 1);
+  if (rest.length === 0) return `${base}\\_`;
+  return `${base}_{${subscript(rest)}}`;
+}
+
+function subscript(text: string): string {
+  const at = text.indexOf("_");
+  if (at < 0) return subscriptAtom(text);
+  const head = text.slice(0, at);
+  const tail = text.slice(at + 1);
+  const body = head.length === 0 ? "" : subscriptAtom(head);
+  if (tail.length === 0) return body;
+  const nested = subscript(tail);
+  if (body.length === 0) return nested;
+  if (nested.length === 0) return body;
+  return `${body}_{${nested}}`;
+}
+
+function subscriptAtom(text: string): string {
+  if (/^\d+$/.test(text) || text.length === 1) return text;
+  return `\\mathrm{${text}}`;
+}
+
+function escaped(text: string): string {
   return text.replaceAll("_", "\\_");
 }

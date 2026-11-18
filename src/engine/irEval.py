@@ -22,7 +22,6 @@ UREG = pint.UnitRegistry()
 
 CONSTANTS = {
     "pi": sympy.pi,
-    "E": sympy.E,
     "I": sympy.I,
     "oo": sympy.oo,
 }
@@ -78,6 +77,8 @@ def _statement(node: dict, session: Session) -> dict:
     kind = node["kind"]
     if kind == "restart":
         session.clear()
+        return _ok("expression", "", "")
+    if kind == "show":
         return _ok("expression", "", "")
     if kind == "assign":
         return _assign(node, session)

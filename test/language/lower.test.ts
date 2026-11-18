@@ -59,6 +59,14 @@ describe("lower", () => {
     assert.equal(lower(parsed.node).kind, "symbol");
   });
 
+  test("a trailing semicolon is shown and is not solved or bound", () => {
+    const shown = parseStatement("E = x;");
+    assert.equal(lowerStatement(shown.node, shown.displayOnly).kind, "show");
+    const assigned = parseStatement("a := 1;");
+    assert.equal(lowerStatement(assigned.node, assigned.displayOnly).kind, "show");
+    assert.equal(lowered("E = x").kind, "equation");
+  });
+
   test("spans survive lowering", () => {
     const parsed = parseStatement("diff(x^2, x)");
     const power = find(parsed.node, (node) => node.type === "binary" && node.op === "^");

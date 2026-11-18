@@ -167,10 +167,48 @@ describe("toLatex", () => {
 
     assert.match(toLatex(parseStatement("sin(x)").node, null), /\\sin/);
     assert.match(toLatex(parseStatement("factor(x)").node, null), /\\operatorname\{factor\}/);
-    assert.match(toLatex(parseStatement("pi + E + I + oo").node, null), /\\pi/);
-    assert.match(toLatex(parseStatement("pi + E + I + oo").node, null), /\\infty/);
+    const constants = toLatex(parseStatement("pi + E + I + oo").node, null, false);
+    assert.match(constants, /\\pi/);
+    assert.match(constants, /\\infty/);
+    assert.equal(constants.includes("\\mathrm{e}"), false);
+    assert.match(constants, / E /);
     assert.match(toLatex(parseStatement("1e-3").node, null), /\\times 10\^\{-3\}/);
-    assert.match(toLatex(parseStatement("a_1").node, null), /a\\_1/);
+    assert.equal(toLatex(parseStatement("a_1").node, null, false), "a_{1}");
+  });
+
+  test("a name with an underscore is a subscript, and E stays E", () => {
+    assert.equal(toLatex(parseStatement("p_0").node, null, false), "p_{0}");
+    assert.equal(toLatex(parseStatement("V_gas").node, null, false), "V_{\\mathrm{gas}}");
+    assert.equal(toLatex(parseStatement("x_i_j").node, null, false), "x_{i_{j}}");
+    assert.equal(toLatex(parseStatement("V_").node, null, false), "V\\_");
+    assert.equal(toLatex(parseStatement("E").node, null, false), "E");
+    renders(toLatex(parseStatement("V_gas").node, null));
+  });
+
+  test("grouping parentheses drop out of an exponent and both sides of a fraction", () => {
+    const energy =
+      "E = p_0 * V_0^n * (V_gas^(1-n) - V_0^(1-n)) / (n-1)";
+    const plain = toLatex(parseStatement(energy).node, null, false);
+    assert.equal(
+      plain,
+      "E = \\frac{p_{0}V_{0}^{n}\\left(V_{\\mathrm{gas}}^{1 - n} - V_{0}^{1 - n}\\right)}{n - 1}",
+    );
+    assert.equal(plain.includes("\\mathrm{e}"), false);
+    assert.equal(plain.includes("\\_"), false);
+    renders(toLatex(parseStatement(energy).node, null));
+
+    const parsed = parseStatement("V_0^(1-n)");
+    const group = find(parsed.node, (node) => node.type === "group");
+    const hit = toLatex(parsed.node, group.span);
+    assert.match(hit, /regne-hit/);
+    assert.match(hit, new RegExp(`span=${group.span.start}:${group.span.end}`));
+    assert.equal(toLatex(parsed.node, null, false), "V_{0}^{1 - n}");
+
+    const fraction = toLatex(parseStatement("(a+b)/(c+d)").node, null, false);
+    assert.equal(fraction, "\\frac{a + b}{c + d}");
+    const factor = toLatex(parseStatement("(a+b)*c").node, null, false);
+    assert.match(factor, /\\left\(a \+ b\\right\)/);
+    renders(toLatex(parseStatement(energy + ";").node, null));
   });
 
   test("a hit on the integrate bounds wraps the integral and not the integrand", () => {

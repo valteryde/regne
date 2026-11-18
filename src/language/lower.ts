@@ -6,7 +6,8 @@ export function lower(node: Node): Ir {
   return lowerNode(node);
 }
 
-export function lowerStatement(node: Node): Ir {
+export function lowerStatement(node: Node, displayOnly = false): Ir {
+  if (displayOnly) return { kind: "show", span: copy(node.span) };
   if (node.type === "name" && node.text === "restart") {
     return { kind: "restart", span: copy(node.span) };
   }

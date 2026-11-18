@@ -96,14 +96,14 @@ export function evaluationPlan(blocks: Block[]): PlanItem[] {
       items.push({
         role: "statement",
         source: block.source,
-        ir: lowerStatement(block.parsed.node),
+        ir: lowerStatement(block.parsed.node, block.parsed.displayOnly),
         key: block.span.start,
       });
       continue;
     }
     if (block.kind !== "paragraph") continue;
     for (const math of block.math) {
-      if (!math.parsed || math.error || !takesInlineValue(math.parsed.node)) continue;
+      if (!math.parsed || math.error || math.parsed.displayOnly || !takesInlineValue(math.parsed.node)) continue;
       items.push({
         role: "inline",
         source: math.source,

@@ -91,7 +91,7 @@ The language is a calculator that looks like Python. It is not Python. There is 
 ### 4.1 Statements
 
 ```text
-statement   = assignment | equation | expression
+statement   = (assignment | equation | expression) ";"?
 assignment  = lvalue ":=" expression
 equation    = expression "=" expression
 lvalue      = name | name "(" name ("," name)* ")"
@@ -106,10 +106,13 @@ Examples, and what they mean:
 | `a := 10 + 5` | Bind `a` in the session. |
 | `f(x) := x^2 + 1` | Bind a function. |
 | `10 [bar] * 66 [L]` | A product of quantities. |
+| `E = p_0 * V_0;` | Typeset the equation. Do not solve it. |
 
 `=` is an equation, never an assignment. `:=` is the only assignment. `==` is not used.
 
-An equation with one unbound symbol is solved for that symbol. `0 = x^2 + 2*x - 4` solves for `x`. More than one unbound symbol is not guessed. The author writes `solve(equation, name)`. Names already bound in the session are knowns.
+An equation with one unbound symbol is solved for that symbol. `0 = x^2 + 2*x - 4` solves for `x`. More than one unbound symbol is not guessed. The author writes `solve(equation, name)`, or ends the line with `;` to keep the equation on the page without solving it. Names already bound in the session are knowns.
+
+A statement may end with `;`. The page typesets it and does not evaluate it. The semicolon is not printed. An equation is not solved, an assignment does not bind a name, and an expression grows no value underneath. The same mark works in any statement, not only in equations.
 
 ### 4.2 Expressions
 
@@ -160,6 +163,8 @@ Comparison operators exist so a relation can be typeset and, later, checked. The
 
 Numbers are decimals: `10`, `8.314`, `1e-3`. Names are `letter (letter | digit | "_")*`. A single underscore is not a wildcard.
 
+An underscore in a name is a subscript on the page. `p_0` is \(p_0\). `V_gas` is \(V_{\mathrm{gas}}\). A subscript of one letter, or of digits, stays in math italics. A longer subscript is upright, so it reads as a word. Another underscore nests: `x_i_j` is \(x_{i_{j}}\). The source keeps the underscores. A unit name is upright text and does not take a subscript.
+
 `//` starts a comment that runs to the end of the line. `#` is not a comment. A line that begins with `#` is a heading, defined in section 3.
 
 There are no strings and no attribute access in the first version.
@@ -167,6 +172,8 @@ There are no strings and no attribute access in the first version.
 ### 4.4 Pretty forms
 
 The page does not print `\mathrm{diff}`. The printer knows a small set of calls and draws them as the mathematics they stand for. The source text does not change.
+
+Parentheses that only hold an exponent, or the whole numerator or denominator of a fraction, are left off the page. The superscript and the fraction bar already group those parts. `V_0^(1-n)` is drawn as \(V_0^{1-n}\), and `(a+b)/(c+d)` is a fraction without an extra pair of parentheses. Parentheses around a factor stay: `(a+b)*c` is still a product of a sum and `c`.
 
 | Call | Drawn as |
 | --- | --- |
@@ -194,7 +201,9 @@ Results are not part of the source. They are a cache keyed by the statement and 
 
 Always bound, and completed in the editor:
 
-`diff`, `integrate`, `solve`, `simplify`, `factor`, `expand`, `limit`, `series`, `subs`, `sqrt`, `abs`, `log`, `ln`, `exp`, `sin`, `cos`, `tan`, `pi`, `E`, `I`, `oo`, `plot`, `restart`.
+`diff`, `integrate`, `solve`, `simplify`, `factor`, `expand`, `limit`, `series`, `subs`, `sqrt`, `abs`, `log`, `ln`, `exp`, `sin`, `cos`, `tan`, `pi`, `I`, `oo`, `plot`, `restart`.
+
+`E` is an ordinary name, so an energy `E` stays the letter E. Euler's number is `exp(1)`.
 
 `plot(...)` produces a figure on the page under that statement, at the content width, not a line of mathematics. Plot syntax stays the one the worker already accepts (`plot(sin(x), x = -5..5)`), with `=` inside the range read as a plot domain rather than as an equation to solve. That special case belongs to the plot call only.
 

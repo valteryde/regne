@@ -306,6 +306,25 @@ describe("calls, assignments, and equations", () => {
     if (node.type === "name") assert.equal(node.text, "a_1");
   });
 
+  test("a trailing semicolon typesets the statement and is not part of the math", () => {
+    const equation = parseStatement("E = p_0 * V_0;");
+    assert.equal(equation.displayOnly, true);
+    assert.equal(equation.node.type, "equation");
+    assert.equal(textOf(equation, equation.node), "E = p_0 * V_0");
+
+    const assigned = parseStatement("a := 1;");
+    assert.equal(assigned.displayOnly, true);
+    assert.equal(assigned.node.type, "assign");
+    assert.equal(textOf(assigned, assigned.node), "a := 1");
+
+    const expression = parseStatement("2 + 2 ; // keep");
+    assert.equal(expression.displayOnly, true);
+    assert.equal(expression.comments.length, 1);
+    assert.equal(textOf(expression, expression.node), "2 + 2");
+
+    assert.equal(parseStatement("E = x").displayOnly, false);
+  });
+
   test("parentheses group, and a comma makes a tuple", () => {
     const group = parseStatement("(a+b)*c").node as BinaryNode;
     assert.equal(group.left.type, "group");
@@ -372,5 +391,11 @@ describe("errors", () => {
 
   test("in without a bracket says so", () => {
     assert.match(errorOf("10 in").message, /in needs a unit/);
+  });
+
+  test("a semicolon only ends a statement", () => {
+    assert.match(errorOf(";").message, /Unexpected ;/);
+    assert.match(errorOf("x;;").message, /Unexpected ;/);
+    assert.match(errorOf("f(1; 2)").message, /;/);
   });
 });

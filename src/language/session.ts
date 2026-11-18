@@ -46,7 +46,10 @@ export function runnableStatements(blocks: Block[]): RunnableStatement[] {
   const statements: RunnableStatement[] = [];
   for (const block of blocks) {
     if (block.kind !== "statement" || block.error || !block.parsed) continue;
-    statements.push({ source: block.source, ir: lowerStatement(block.parsed.node) });
+    statements.push({
+      source: block.source,
+      ir: lowerStatement(block.parsed.node, block.parsed.displayOnly),
+    });
   }
   return statements;
 }

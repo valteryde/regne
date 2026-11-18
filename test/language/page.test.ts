@@ -102,6 +102,23 @@ describe("the painted page", () => {
     if (math?.kind === "math") assert.match(math.latex, /regne-hit/);
   });
 
+  test("a semicolon is drawn and is not sent to the solver", () => {
+    const source = "E = p_0 * V_gas;\n-- Sum $2 + 2;$.\n";
+    const plan = evaluationPlan(readDocument(source).blocks);
+    assert.deepEqual(
+      plan.map((item) => item.role),
+      ["statement"],
+    );
+    assert.equal(plan[0].ir.kind, "show");
+    const displays = paint(source, [{ latex: "", kind: "expression" }], []);
+    assert.equal(displays[0].error, null);
+    assert.equal(displays[0].valueLatex, "");
+    assert.match(displays[0].inputLatex, /E/);
+    assert.match(displays[0].inputLatex, /V_\{\\mathrm\{gas\}\}/);
+    assert.equal(displays[0].inputLatex.includes("\\mathrm{e}"), false);
+    assert.equal(displays[0].inputLatex.includes(";"), false);
+  });
+
   test("inline constants are evaluated in order, and a derivative is not", () => {
     const source = "n := 2\n-- Twice is $n + n$.\n-- The derivative $diff(x^2, x)$ stays a form.\n";
     const plan = evaluationPlan(readDocument(source).blocks);

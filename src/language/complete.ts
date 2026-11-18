@@ -20,7 +20,6 @@ export const CORE_NAMES = [
   "cos",
   "tan",
   "pi",
-  "E",
   "I",
   "oo",
   "plot",
