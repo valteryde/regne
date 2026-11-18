@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { KeyCode, KeyMod, Range, editor } from "monaco-editor/editor/editor.api";
+import { KeyCode, KeyMod, Range, Selection, editor } from "monaco-editor/editor/editor.api";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor-css";
 // editor.api omits these. Without them Option (Mac) and Ctrl (Windows) plus an arrow
@@ -111,6 +111,63 @@ function sourceHeadings(text: string): SourceHeading[] {
       ? [{ title: block.title.trim() || "Untitled", level: block.level, start: block.span.start }]
       : [],
   );
+}
+
+function deleteWholeLine(codeEditor: editor.IStandaloneCodeEditor): void {
+  const model = codeEditor.getModel();
+  const selections = codeEditor.getSelections();
+  if (!model || !selections || selections.length === 0) return;
+  const lineCount = model.getLineCount();
+  if (lineCount === 1 && model.getLineLength(1) === 0) return;
+
+  const spans = selections
+    .map((selection) => {
+      let endLine = selection.endLineNumber;
+      // A selection that ends at column 1 is sitting on the next line, not covering it.
+      if (selection.startLineNumber < selection.endLineNumber && selection.endColumn === 1) endLine -= 1;
+      return { startLine: selection.startLineNumber, endLine, column: selection.positionColumn };
+    })
+    .sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
+
+  const merged: { startLine: number; endLine: number; column: number }[] = [];
+  for (const span of spans) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.endLine + 1 >= span.startLine) {
+      previous.endLine = Math.max(previous.endLine, span.endLine);
+    } else {
+      merged.push({ ...span });
+    }
+  }
+
+  const edits: editor.IIdentifiedSingleEditOperation[] = [];
+  const cursors: Selection[] = [];
+  let removed = 0;
+  for (const span of merged) {
+    let startLine = span.startLine;
+    let endLine = span.endLine;
+    let startColumn = 1;
+    let endColumn = model.getLineMaxColumn(endLine);
+    let cursorColumn = 1;
+    if (endLine < lineCount) {
+      cursorColumn = Math.min(span.column, model.getLineMaxColumn(endLine + 1));
+      endLine += 1;
+      endColumn = 1;
+    } else if (startLine > 1) {
+      startLine -= 1;
+      startColumn = model.getLineMaxColumn(startLine);
+      cursorColumn = Math.min(span.column, startColumn);
+    }
+    edits.push({ range: new Range(startLine, startColumn, endLine, endColumn), text: "" });
+    const cursorLine = startLine - removed;
+    cursors.push(new Selection(cursorLine, cursorColumn, cursorLine, cursorColumn));
+    removed += span.endLine - span.startLine + 1;
+  }
+
+  codeEditor.pushUndoStop();
+  codeEditor.executeEdits("delete-line", edits, cursors);
+  codeEditor.pushUndoStop();
+  const cursor = cursors[0];
+  if (cursor) codeEditor.revealPosition({ lineNumber: cursor.positionLineNumber, column: cursor.positionColumn });
 }
 
 function documentTitle(text: string, filePath: string | null): string {
@@ -369,6 +426,11 @@ export const SourcePage: React.FC = () => {
     };
     codeEditor.addCommand(KeyMod.Alt | KeyCode.UpArrow, () => nudge("parent"));
     codeEditor.addCommand(KeyMod.Alt | KeyCode.DownArrow, () => nudge("child"));
+    // Command-Delete on Mac, Ctrl-Backspace and Ctrl-Delete on Windows.
+    // The Mac key labeled Delete is Backspace; a full keyboard's Delete key is the other one.
+    const deleteLine = () => deleteWholeLine(codeEditor);
+    codeEditor.addCommand(KeyMod.CtrlCmd | KeyCode.Backspace, deleteLine);
+    codeEditor.addCommand(KeyMod.CtrlCmd | KeyCode.Delete, deleteLine);
     codeEditor.focus();
     void recomputeRef.current(sourceRef.current);
     return () => {
